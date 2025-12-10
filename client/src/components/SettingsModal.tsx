@@ -112,6 +112,20 @@ export const SettingsModal = ({ isOpen, onClose, uid, categories, initialPrimary
     }
   });
 
+  // 5. Reorder Categories
+  const reorderMutation = useMutation({
+    mutationFn: async (orders: { id: number; priority: number }[]) => {
+      return api.put('/categories/reorder', { orders });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['categories'] });
+      // showToast('順序を更新しました', 'success'); // 頻繁に出るとうるさいのでコメントアウト推奨だが、フィードバックとして残す
+    },
+    onError: () => {
+      showToast('順序の更新に失敗しました', 'error');
+    }
+  });
+
   // --- Handlers ---
 
   const handleSaveSettings = () => {
@@ -129,7 +143,9 @@ export const SettingsModal = ({ isOpen, onClose, uid, categories, initialPrimary
     } else {
       // AdminならSYSTEM、それ以外はCUSTOM
       const type = isAdmin ? 'SYSTEM' : 'CUSTOM';
-      createMutation.mutate({ name: newLabel.trim(), type });
+      // 新規作成時は最後尾に追加（現在の最大priority + 10）
+      const maxPriority = categories.length > 0 ? Math.max(...categories.map(c => c.priority || 0)) : 0;
+      createMutation.mutate({ name: newLabel.trim(), type, priority: maxPriority + 10 } as any);
     }
   };
 
@@ -142,6 +158,26 @@ export const SettingsModal = ({ isOpen, onClose, uid, categories, initialPrimary
     if (window.confirm('このカテゴリを削除しますか？\n（過去の履歴データは保持されます）')) {
       deleteMutation.mutate(id);
     }
+  };
+
+  const handleMoveCategory = (index: number, direction: 'up' | 'down') => {
+    if (direction === 'up' && index === 0) return;
+    if (direction === 'down' && index === categories.length - 1) return;
+
+    const newCategories = [...categories];
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    
+    // Swap
+    [newCategories[index], newCategories[targetIndex]] = [newCategories[targetIndex], newCategories[index]];
+
+    // Recalculate priorities
+    // リストの並び順（index）× 10 を新しいpriorityとする
+    const updates = newCategories.map((cat, idx) => ({
+      id: cat.id,
+      priority: idx * 10
+    }));
+
+    reorderMutation.mutate(updates);
   };
 
   const handleCancelEdit = () => {
@@ -435,7 +471,7 @@ export const SettingsModal = ({ isOpen, onClose, uid, categories, initialPrimary
                     <div className="space-y-4 pt-4 border-t">
                         <h3 className="font-bold text-gray-800">カテゴリ一覧</h3>
                         <div className="space-y-2">
-                            {categories.map(cat => {
+                            {categories.map((cat, index) => {
                                 const isSystem = cat.type === 'SYSTEM';
                                 // Edit allowed if: (Admin) OR (Custom & User)
                                 const canEdit = isAdmin || (!isSystem);
@@ -447,9 +483,26 @@ export const SettingsModal = ({ isOpen, onClose, uid, categories, initialPrimary
                                             <span className="font-medium">{cat.name}</span>
                                             {isSystem && <span className="text-xs bg-gray-200 text-gray-500 px-1 rounded">SYS</span>}
                                         </div>
-                                        <div className="flex gap-1">
+                                        <div className="flex gap-1 items-center">
                                             {canEdit ? (
                                                 <>
+                                                    <button 
+                                                        onClick={() => handleMoveCategory(index, 'up')}
+                                                        disabled={index === 0 || reorderMutation.isPending}
+                                                        className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-30"
+                                                        title="上へ移動"
+                                                    >
+                                                        <ArrowUp size={18} />
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => handleMoveCategory(index, 'down')}
+                                                        disabled={index === categories.length - 1 || reorderMutation.isPending}
+                                                        className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-30"
+                                                        title="下へ移動"
+                                                    >
+                                                        <ArrowDown size={18} />
+                                                    </button>
+                                                    <div className="w-px h-6 bg-gray-200 mx-1"></div>
                                                     <button 
                                                         onClick={() => handleEditClick(cat)}
                                                         className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"

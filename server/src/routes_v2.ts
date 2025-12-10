@@ -134,12 +134,39 @@ router.post('/categories', async (req: Request, res: Response) => {
   }
 });
 
+// PUT /api/categories/reorder
+router.put('/categories/reorder', async (req: Request, res: Response) => {
+  try {
+    const currentUser = getUser(req);
+    const { orders } = req.body; // { id: number, priority: number }[]
+
+    if (!Array.isArray(orders)) {
+      return res.status(400).json({ error: 'Invalid data format' });
+    }
+
+    // トランザクションで一括更新
+    await prisma.$transaction(
+      orders.map((item) => 
+        prisma.category.update({
+          where: { id: item.id },
+          data: { priority: item.priority },
+        })
+      )
+    );
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Reorder Error:', error);
+    res.status(500).json({ error: 'Failed to reorder categories' });
+  }
+});
+
 // PUT /api/categories/:id
 router.put('/categories/:id', async (req: Request, res: Response) => {
   try {
     const currentUser = getUser(req);
     const { id } = req.params;
-    const { name } = req.body;
+    const { name, priority } = req.body;
 
     const category = await prisma.category.findUnique({ where: { id: Number(id) } });
     if (!category) return res.status(404).json({ error: 'Category not found' });
@@ -152,9 +179,13 @@ router.put('/categories/:id', async (req: Request, res: Response) => {
       return res.status(403).json({ error: 'Owner only' });
     }
 
+    const data: any = {};
+    if (name !== undefined) data.name = name;
+    if (priority !== undefined) data.priority = priority;
+
     const updated = await prisma.category.update({
       where: { id: Number(id) },
-      data: { name }, // 名前のみ更新
+      data,
     });
     res.json(updated);
   } catch (error) {
