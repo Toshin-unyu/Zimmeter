@@ -1,0 +1,104 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+// --------------------------------------
+// Enums
+// --------------------------------------
+
+enum UserStatus {
+  ACTIVE   // 通常利用可能
+  DISABLED // 無効化 (ログイン不可 / 復帰可能 / 画面はグレーアウト)
+  DELETED  // 削除 (ログイン不可 / 復帰不可 / 画面は赤色ロック / データ保持)
+}
+
+enum CategoryType {
+  SYSTEM // 管理者のみ編集可能 (全共通)
+  CUSTOM // 作成したユーザーのみ編集可能 (個人用)
+}
+
+enum Role {
+  ADMIN // 管理者
+  USER  // 一般ユーザー
+}
+
+// --------------------------------------
+// Models
+// --------------------------------------
+
+model User {
+  id        Int        @id @default(autoincrement())
+  uid       String     @unique // ログインID
+  name      String
+  role      Role       @default(USER)
+  status    UserStatus @default(ACTIVE)
+  
+  hourlyRate Int?      @default(0)
+
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  settings   UserSetting?
+  logs       WorkLog[]
+  categories Category[] // 自分が作成したカテゴリ (Custom)
+
+  @@map("users")
+}
+
+model UserSetting {
+  userId      Int      @id
+  user        User     @relation(fields: [userId], references: [id])
+  
+  // ボタン順序や非表示設定 (例: { "order": [1, 5], "hidden": [2] })
+  preferences Json?    
+
+  updatedAt   DateTime @updatedAt
+
+  @@map("user_settings")
+}
+
+model Category {
+  id          Int          @id @default(autoincrement())
+  name        String       // 現在の業務項目名
+  type        CategoryType
+  
+  // Systemの場合はNULL、Customの場合は作成者ID
+  createdById Int?         
+  createdBy   User?        @relation(fields: [createdById], references: [id])
+  
+  isDeleted   Boolean      @default(false) // 論理削除
+  priority    Int          @default(0)     // 表示順序
+
+  logs        WorkLog[]
+
+  @@map("categories")
+}
+
+model WorkLog {
+  id          Int       @id @default(autoincrement())
+  userId      Int
+  user        User      @relation(fields: [userId], references: [id])
+  
+  // マスタ参照 (マスタ削除後もID維持)
+  categoryId  Int?      
+  category    Category? @relation(fields: [categoryId], references: [id])
+
+  // ★重要: スナップショット
+  // ログ作成時点の Category.name をコピー保存する。
+  categoryNameSnapshot String 
+
+  startTime   DateTime  @default(now())
+  endTime     DateTime?
+  duration    Int?      // 秒 (endTime - startTime)
+
+  createdAt   DateTime  @default(now())
+
+  @@index([userId, startTime])
+  @@map("work_logs")
+}

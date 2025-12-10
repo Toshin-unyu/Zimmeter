@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: zimmeter-db
+    ports:
+      - "55002:5432"
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: zimmeter
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  server:
+    build: ./server
+    container_name: zimmeter-server
+    ports:
+      - "9102:9102"
+    environment:
+      - DATABASE_URL=postgresql://user:password@db:5432/zimmeter
+      - PORT=9102
+    depends_on:
+      - db
+    volumes:
+      - ./server:/app
+      - /app/node_modules
+
+  client:
+    build: ./client
+    container_name: zimmeter-client
+    ports:
+      - "9002:9002"
+    environment:
+      - VITE_API_TARGET=http://server:9102
+    depends_on:
+      - server
+    volumes:
+      - ./client:/app
+      - /app/node_modules
+
+volumes:
+  postgres_data:

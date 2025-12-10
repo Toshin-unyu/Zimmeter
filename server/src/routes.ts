@@ -1,0 +1,243 @@
+import { Router, Request, Response } from 'express';
+import { prisma } from './db';
+
+const router = Router();
+
+// --- Log Operations ---
+
+// GET /api/logs/active/:uid
+// 現在計測中のタスクを取得
+router.get('/logs/active/:uid', async (req: Request, res: Response) => {
+  const { uid } = req.params;
+  try {
+    const activeLog = await prisma.workLog.findFirst({
+      where: {
+        uid,
+        endTime: null,
+      },
+    });
+    res.json(activeLog);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to fetch active log' });
+  }
+});
+
+// POST /api/logs/switch
+// 作業切り替え
+router.post('/logs/switch', async (req: Request, res: Response) => {
+  const { uid, categoryId, categoryLabel, role } = req.body;
+  
+  if (!uid || !categoryId || !categoryLabel) {
+    res.status(400).json({ error: 'Missing required fields' });
+    return; // Ensure to return to stop execution
+  }
+
+  const now = new Date();
+
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. Close active log
+      const activeLog = await tx.workLog.findFirst({
+        where: {
+          uid,
+          endTime: null,
+        },
+      });
+
+      if (activeLog) {
+        const duration = Math.floor((now.getTime() - activeLog.startTime.getTime()) / 1000);
+        await tx.workLog.update({
+          where: { id: activeLog.id },
+          data: {
+            endTime: now,
+            duration,
+          },
+        });
+      }
+
+      // 2. Create new log
+      const newLog = await tx.workLog.create({
+        data: {
+          uid,
+          categoryId,
+          categoryLabel,
+          role,
+          startTime: now,
+        },
+      });
+
+      return newLog;
+    });
+
+    res.json(result);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to switch task' });
+  }
+});
+
+// PATCH /api/logs/:id
+// ログ修正
+router.patch('/logs/:id', async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { categoryId, categoryLabel, isManual } = req.body;
+
+  try {
+    const updatedLog = await prisma.workLog.update({
+      where: { id: parseInt(id) },
+      data: {
+        categoryId,
+        categoryLabel,
+        isManual: isManual ?? true,
+      },
+    });
+    res.json(updatedLog);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to update log' });
+  }
+});
+
+// DELETE /api/logs/:id
+// ログ削除
+router.delete('/logs/:id', async (req: Request, res: Response) => {
+  const { id } = req.params;
+
+  try {
+    await prisma.workLog.delete({
+      where: { id: parseInt(id) },
+    });
+    res.json({ success: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to delete log' });
+  }
+});
+
+// GET /api/logs/history/:uid
+// 当日の履歴
+router.get('/logs/history/:uid', async (req: Request, res: Response) => {
+  const { uid } = req.params;
+  
+  // Get start of today (00:00:00)
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  try {
+    const logs = await prisma.workLog.findMany({
+      where: {
+        uid,
+        startTime: {
+          gte: today,
+        },
+      },
+      orderBy: {
+        startTime: 'desc',
+      },
+    });
+    res.json(logs);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to fetch history' });
+  }
+});
+
+// GET /api/export/csv
+// 全データのCSVエクスポート
+router.get('/export/csv', async (req: Request, res: Response) => {
+  try {
+    const logs = await prisma.workLog.findMany({
+      orderBy: { startTime: 'desc' },
+    });
+
+    // Simple CSV conversion
+    const headers = ['id', 'uid', 'categoryId', 'categoryLabel', 'role', 'startTime', 'endTime', 'duration', 'isManual', 'createdAt'];
+    const csvRows = [headers.join(',')];
+
+    for (const log of logs) {
+      csvRows.push([
+        log.id,
+        `"${log.uid}"`,
+        `"${log.categoryId}"`,
+        `"${log.categoryLabel}"`,
+        `"${log.role || ''}"`,
+        log.startTime.toISOString(),
+        log.endTime ? log.endTime.toISOString() : '',
+        log.duration || '',
+        log.isManual,
+        log.createdAt.toISOString()
+      ].join(','));
+    }
+
+    res.header('Content-Type', 'text/csv');
+    res.attachment('work_logs.csv');
+    res.send(csvRows.join('\n'));
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to export CSV' });
+  }
+});
+
+// --- Settings Operations ---
+
+// GET /api/settings/:uid
+router.get('/settings/:uid', async (req: Request, res: Response) => {
+  const { uid } = req.params;
+  try {
+    const settings = await prisma.userSetting.findUnique({
+      where: { uid },
+    });
+    res.json(settings);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to fetch settings' });
+  }
+});
+
+// POST /api/settings
+router.post('/settings', async (req: Request, res: Response) => {
+  let { uid, primaryButtons, secondaryButtons, customCategories } = req.body;
+  
+  if (!uid) {
+    res.status(400).json({ error: 'UID is required' });
+    return;
+  }
+
+  // Ensure customCategories is properly formatted
+  if (typeof customCategories === 'string') {
+    try {
+      customCategories = JSON.parse(customCategories);
+    } catch (e) {
+      console.error('Failed to parse customCategories string:', e);
+      customCategories = [];
+    }
+  }
+
+  if (!Array.isArray(customCategories)) {
+    customCategories = [];
+  }
+
+  try {
+    const settings = await prisma.userSetting.upsert({
+      where: { uid },
+      update: {
+        primaryButtons,
+        secondaryButtons,
+        customCategories,
+      },
+      create: {
+        uid,
+        primaryButtons,
+        secondaryButtons,
+        customCategories,
+      },
+    });
+    res.json(settings);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to save settings' });
+  }
+});
+
+export default router;
