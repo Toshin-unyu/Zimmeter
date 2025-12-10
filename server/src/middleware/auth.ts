@@ -72,6 +72,29 @@ export const statusGuard = async (req: Request, res: Response, next: NextFunctio
 
     next();
   } catch (error) {
+    // Prisma のユニーク制約違反 (同じ uid のユーザーが同時に作成された等) の場合は
+    // 既存ユーザーを取り直して継続する。
+    const anyError = error as any;
+    if (anyError?.code === 'P2002') {
+      try {
+        const uid = (req.headers['x-user-id'] as string) || (req.query.uid as string);
+        if (uid) {
+          const existing = await prisma.user.findUnique({ where: { uid } });
+          if (existing) {
+            req.user = {
+              id: existing.id,
+              uid: existing.uid,
+              role: existing.role,
+              status: existing.status,
+            };
+            return next();
+          }
+        }
+      } catch (innerError) {
+        console.error('Status Guard Recovery Error:', innerError);
+      }
+    }
+
     console.error('Status Guard Error:', error);
     res.status(500).json({ error: 'Internal Server Error' });
   }
