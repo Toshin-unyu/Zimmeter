@@ -1,7 +1,7 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../lib/axios';
-import { Activity, Download } from 'lucide-react';
+import { Activity, Download, ChevronDown, Check } from 'lucide-react';
 import {
   BarChart,
   Bar,
@@ -50,7 +50,9 @@ type ModeKey = (typeof MODES)[number]['key'];
 import { ChartWrapper } from '../Common/ChartWrapper';
 
 export const AdminWorkLogCharts = () => {
-  const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
+  const [selectedUserIds, setSelectedUserIds] = useState<number[]>([]);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const [mode, setMode] = useState<ModeKey>('day');
   
   // CSVダウンロード用の期間state
@@ -68,6 +70,24 @@ export const AdminWorkLogCharts = () => {
     },
   });
 
+  // Initialize selection with first user if available and nothing selected
+  useEffect(() => {
+    if (users && users.length > 0 && selectedUserIds.length === 0) {
+      setSelectedUserIds([users[0].id]);
+    }
+  }, [users]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   const { data: categories } = useQuery<Category[]>({
     queryKey: ['categories'],
     queryFn: async () => {
@@ -80,39 +100,53 @@ export const AdminWorkLogCharts = () => {
     staleTime: 1000 * 60 * 5,
   });
 
-  const effectiveUserId = selectedUserId ?? (users && users.length > 0 ? users[0].id : null);
+  const effectiveUserIds = useMemo(() => {
+      if (selectedUserIds.length > 0) return selectedUserIds;
+      if (users && users.length > 0) return [users[0].id];
+      return [];
+  }, [selectedUserIds, users]);
 
-  const { data: stats, isLoading } = useQuery<StatsResponse>({
-    queryKey: ['logsStats', effectiveUserId, mode],
+  // Primary user for Single-User charts (Time Series)
+  const primaryUserId = effectiveUserIds[0];
+
+  // Query for Multi-User Stats (Pie Chart)
+  const { data: multiStats, isLoading: isLoadingMulti } = useQuery<StatsResponse>({
+    queryKey: ['logsStats', effectiveUserIds, mode],
     queryFn: async () => {
-      if (!effectiveUserId) throw new Error('No user selected');
+      if (effectiveUserIds.length === 0) throw new Error('No user selected');
       const res = await api.get<StatsResponse>('/logs/stats', {
-        params: { userId: effectiveUserId, mode },
+        params: { userIds: effectiveUserIds.join(','), mode },
       });
       return res.data;
     },
-    enabled: !!effectiveUserId,
+    enabled: effectiveUserIds.length > 0,
   });
 
-  const totalMinutesAll = stats?.byCategory.reduce((sum, c) => sum + c.minutes, 0) ?? 0;
+  // Query for Single-User Stats (Bar Chart)
+  const { data: singleStats, isLoading: isLoadingSingle } = useQuery<StatsResponse>({
+    queryKey: ['logsStats', [primaryUserId], mode],
+    queryFn: async () => {
+      if (!primaryUserId) throw new Error('No user selected');
+      const res = await api.get<StatsResponse>('/logs/stats', {
+        params: { userIds: String(primaryUserId), mode },
+      });
+      return res.data;
+    },
+    enabled: !!primaryUserId,
+  });
 
-  // Pie Chart Data Preparation
+  const totalMinutesMulti = multiStats?.byCategory.reduce((sum, c) => sum + c.minutes, 0) ?? 0;
+  const totalMinutesSingle = singleStats?.timeSeries.reduce((sum, p) => sum + p.totalMinutes, 0) ?? 0;
+
+  // Pie Chart Data Preparation (Multi User)
   const pieData = useMemo(() => {
-    if (!stats?.byCategory) return [];
+    if (!multiStats?.byCategory) return [];
     
-    return stats.byCategory.map(stat => {
+    return multiStats.byCategory.map(stat => {
         // Resolve color
         const category = categories?.find(c => c.name === stat.categoryName);
         // Fallback to name-based logic if category not found in DB list (e.g. deleted)
         const { color: twClass } = getCategoryColor(category || { name: stat.categoryName });
-        
-        // Extract hex-like color from tailwind class or map it manually
-        // Since we can't easily convert tailwind classes to hex for Recharts in runtime without full map,
-        // we will use a simple mapping or try to extract from bgColor if available in DB.
-        
-        // Strategy:
-        // 1. If DB has bgColor (e.g. "bg-blue-100"), map to approximate hex.
-        // 2. If no DB, use simple hash or preset palette.
         
         let fill = '#cbd5e1'; // default slate-300
         
@@ -129,7 +163,6 @@ export const AdminWorkLogCharts = () => {
             'bg-slate-800': '#1e293b', // slate-800
         };
         
-        // Try to match from fetched category or just text analysis
         const bgClassKey = category?.bgColor || twClass.split(' ').find(c => c.startsWith('bg-'));
         
         if (bgClassKey && colorMap[bgClassKey]) {
@@ -142,23 +175,41 @@ export const AdminWorkLogCharts = () => {
             fill
         };
     }).sort((a, b) => b.value - a.value);
-  }, [stats, categories]);
+  }, [multiStats, categories]);
 
-  const effectiveUser = users?.find(u => u.id === effectiveUserId);
-  const userNameForTitle = effectiveUser ? `${effectiveUser.name} (${effectiveUser.uid})` : 'Unknown User';
+  // Display Name Logic
+  const userNameForTitle = useMemo(() => {
+    if (!users || effectiveUserIds.length === 0) return 'No User';
+    if (effectiveUserIds.length === 1) {
+        const u = users.find(user => user.id === effectiveUserIds[0]);
+        return u ? `${u.name} (${u.role})` : 'Unknown User';
+    }
+    return `${effectiveUserIds.length} Users Selected`;
+  }, [users, effectiveUserIds]);
+
+  const detailedUserNames = useMemo(() => {
+    if (!users || effectiveUserIds.length === 0) return 'No User';
+    const names = effectiveUserIds.map(id => {
+        const u = users.find(user => user.id === id);
+        return u ? `${u.name} (${u.role})` : String(id);
+    });
+    return names.join(', ');
+  }, [users, effectiveUserIds]);
+
+  // Single User Name for Bar Chart Title
+  const primaryUserName = useMemo(() => {
+      const u = users?.find(user => user.id === primaryUserId);
+      return u ? `${u.name} (${u.role})` : 'Unknown User';
+  }, [users, primaryUserId]);
 
   const handleDownload = async () => {
-    if (!effectiveUserId) return;
+    if (effectiveUserIds.length === 0) return;
     try {
-      // 選択中のユーザーのUIDを取得
-      const targetUser = users?.find(u => u.id === effectiveUserId);
-      if (!targetUser) return;
-
       const res = await api.get('/export/csv', {
         params: {
           start: downloadStartDate,
           end: downloadEndDate,
-          targetUid: targetUser.uid,
+          userIds: effectiveUserIds.join(','),
         },
         responseType: 'blob', // バイナリとして受け取る
       });
@@ -167,7 +218,14 @@ export const AdminWorkLogCharts = () => {
       const url = window.URL.createObjectURL(new Blob([res.data]));
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `work_logs_${targetUser.uid}_${downloadStartDate}_${downloadEndDate}.csv`);
+      
+      // ファイル名にユーザーIDを含める
+      const uidPart = effectiveUserIds.map(id => {
+          const u = users?.find(user => user.id === id);
+          return u ? u.uid : String(id);
+      }).join('_');
+        
+      link.setAttribute('download', `work_logs_${uidPart}_${downloadStartDate}_${downloadEndDate}.csv`);
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -176,9 +234,33 @@ export const AdminWorkLogCharts = () => {
       alert('CSVダウンロードに失敗しました');
     }
   };
+  
+  const toggleUserSelection = (id: number) => {
+    setSelectedUserIds(prev => {
+        if (prev.includes(id)) {
+            // Don't allow empty selection, keep at least one if clicked
+            if (prev.length === 1) return prev;
+            return prev.filter(uid => uid !== id);
+        } else {
+            return [...prev, id];
+        }
+    });
+  };
+
+  const selectAllUsers = () => {
+      if (users && users.length > 0) {
+          if (selectedUserIds.length === users.length) {
+              // Deselect all -> Revert to first user to ensure at least one is selected
+              setSelectedUserIds([users[0].id]);
+          } else {
+              setSelectedUserIds(users.map(u => u.id));
+          }
+      }
+  }
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden h-full flex flex-col">
+       {/* ... Header ... */}
       <div className="p-4 border-b border-gray-100 bg-gray-50 flex flex-col gap-3 shrink-0">
         <div className="flex items-center justify-between gap-2">
           <h3 className="font-bold text-gray-700 flex items-center gap-2">
@@ -187,20 +269,50 @@ export const AdminWorkLogCharts = () => {
           </h3>
         </div>
         <div className="flex flex-wrap items-center gap-3 text-sm">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 relative" ref={dropdownRef}>
             <span className="text-gray-500">ユーザー:</span>
-            <select
-              className="border border-gray-300 rounded px-2 py-1 text-sm"
-              value={effectiveUserId ?? ''}
-              onChange={(e) => setSelectedUserId(Number(e.target.value))}
+            
+            <button
+                type="button"
+                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                className="flex items-center justify-between gap-2 border border-gray-300 rounded px-3 py-1.5 bg-white text-sm min-w-[200px] hover:border-gray-400 transition-colors"
             >
-              {users?.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.name} ({u.role})
-                </option>
-              ))}
-            </select>
+                <span className="truncate max-w-[180px]">
+                    {userNameForTitle}
+                </span>
+                <ChevronDown size={14} className={`text-gray-400 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            {isDropdownOpen && (
+                <div className="absolute top-full left-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-[300px] overflow-y-auto">
+                    <div className="p-2 border-b border-gray-100 sticky top-0 bg-white z-10">
+                         <button 
+                            onClick={selectAllUsers}
+                            className="text-xs text-blue-600 hover:text-blue-800 font-medium px-2 py-1 rounded hover:bg-blue-50 w-full text-left"
+                         >
+                            {users && selectedUserIds.length === users.length ? 'すべて解除' : 'すべて選択'}
+                         </button>
+                    </div>
+                    <div className="p-1">
+                        {users?.map((u) => (
+                            <div 
+                                key={u.id}
+                                onClick={() => toggleUserSelection(u.id)}
+                                className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer rounded"
+                            >
+                                <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${selectedUserIds.includes(u.id) ? 'bg-blue-600 border-blue-600' : 'border-gray-300'}`}>
+                                    {selectedUserIds.includes(u.id) && <Check size={10} className="text-white" />}
+                                </div>
+                                <span className="text-sm text-gray-700">
+                                    {u.name} <span className="text-gray-400 text-xs">({u.role})</span>
+                                </span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
           </div>
+
           <div className="flex items-center gap-2">
             {MODES.map((m) => (
               <button
@@ -223,20 +335,20 @@ export const AdminWorkLogCharts = () => {
       <div className="flex-1 flex flex-col gap-4 p-4 min-h-0 overflow-y-auto">
         <ChartWrapper
             title="時間推移 (分)"
-            previewTitle={`${userNameForTitle} - 時間推移 (分)`}
+            previewTitle={`${primaryUserName} - 時間推移 (分)`}
             headerContent={
                 <span className="text-xs text-slate-400">
-                  合計 {Math.round(totalMinutesAll / 60 * 10) / 10} 時間 ({totalMinutesAll} 分)
+                  {primaryUserName} - 合計 {Math.round(totalMinutesSingle / 60 * 10) / 10} 時間 ({totalMinutesSingle} 分)
                 </span>
             }
-            isLoading={isLoading}
+            isLoading={isLoadingSingle}
             className="flex-1 min-h-[300px]"
         >
-          {isLoading && <div className="flex h-full items-center justify-center text-gray-400 text-xs">読み込み中...</div>}
-          {!isLoading && stats && stats.timeSeries.length === 0 && <div className="flex h-full items-center justify-center text-gray-400 text-xs">データがありません</div>}
-          {!isLoading && stats && stats.timeSeries.length > 0 && (
+          {isLoadingSingle && <div className="flex h-full items-center justify-center text-gray-400 text-xs">読み込み中...</div>}
+          {!isLoadingSingle && singleStats && singleStats.timeSeries.length === 0 && <div className="flex h-full items-center justify-center text-gray-400 text-xs">データがありません</div>}
+          {!isLoadingSingle && singleStats && singleStats.timeSeries.length > 0 && (
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={stats.timeSeries} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+              <BarChart data={singleStats.timeSeries} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                   <XAxis 
                       dataKey="label" 
@@ -260,14 +372,19 @@ export const AdminWorkLogCharts = () => {
         </ChartWrapper>
 
         <ChartWrapper 
-            title="業務項目別 割合" 
-            previewTitle={`${userNameForTitle} - 業務項目別 割合`}
-            isLoading={isLoading}
+            title="業務項目別 割合 (複数選択可)" 
+            previewTitle={`${detailedUserNames} - 業務項目別 割合`}
+            headerContent={
+                <span className="text-xs text-slate-400">
+                  選択中ユーザー合計 {Math.round(totalMinutesMulti / 60 * 10) / 10} 時間 ({totalMinutesMulti} 分)
+                </span>
+            }
+            isLoading={isLoadingMulti}
             className="flex-1 min-h-[300px]"
         >
-          {isLoading && <div className="flex-1 flex items-center justify-center text-gray-400 text-xs">読み込み中...</div>}
-          {!isLoading && stats && stats.byCategory.length === 0 && <div className="flex-1 flex items-center justify-center text-gray-400 text-xs">データがありません</div>}
-          {!isLoading && pieData.length > 0 && (
+          {isLoadingMulti && <div className="flex-1 flex items-center justify-center text-gray-400 text-xs">読み込み中...</div>}
+          {!isLoadingMulti && multiStats && multiStats.byCategory.length === 0 && <div className="flex-1 flex items-center justify-center text-gray-400 text-xs">データがありません</div>}
+          {!isLoadingMulti && pieData.length > 0 && (
               <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                       <Pie

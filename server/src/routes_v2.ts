@@ -443,15 +443,27 @@ router.get('/logs/stats', async (req: Request, res: Response) => {
       return res.status(403).json({ error: 'Admin only' });
     }
 
-    const { userId, mode } = req.query;
+    const { userId, userIds, mode } = req.query;
 
-    if (!userId || !mode) {
-      return res.status(400).json({ error: 'Missing userId or mode' });
+    if ((!userId && !userIds) || !mode) {
+      return res.status(400).json({ error: 'Missing userId(s) or mode' });
     }
 
     const modeStr = String(mode);
     if (!['day', 'week', 'month'].includes(modeStr)) {
       return res.status(400).json({ error: 'Invalid mode' });
+    }
+
+    // Determine target user IDs
+    let targetIds: number[] = [];
+    if (userIds) {
+      targetIds = String(userIds).split(',').map(id => Number(id)).filter(n => !isNaN(n));
+    } else if (userId) {
+      targetIds = [Number(userId)];
+    }
+
+    if (targetIds.length === 0) {
+       return res.status(400).json({ error: 'No valid user IDs provided' });
     }
 
     const now = new Date();
@@ -481,7 +493,7 @@ router.get('/logs/stats', async (req: Request, res: Response) => {
     // 対象ユーザーのログを取得
     const logs = await prisma.workLog.findMany({
       where: {
-        userId: Number(userId),
+        userId: { in: targetIds },
         startTime: {
           gte: rangeStart,
           lte: now,
@@ -585,17 +597,26 @@ router.get('/export/csv', async (req: Request, res: Response) => {
     // ここではQuery Paramsで対応する。
 
     const currentUser = getUser(req);
-    const { start, end, targetUid } = req.query;
+    const { start, end, targetUid, userIds } = req.query;
 
     const where: any = {};
     
     // 一般ユーザーは自分のログしか見れない
     if (currentUser.role !== 'ADMIN') {
       where.userId = currentUser.id;
-    } else if (targetUid) {
-      // Adminが特定ユーザーを指定した場合
-      const target = await prisma.user.findUnique({ where: { uid: String(targetUid) } });
-      if (target) where.userId = target.id;
+    } else {
+      // Admin
+      if (userIds) {
+         // Multiple IDs (numerical)
+         const ids = String(userIds).split(',').map(n => Number(n)).filter(n => !isNaN(n));
+         if (ids.length > 0) {
+            where.userId = { in: ids };
+         }
+      } else if (targetUid) {
+        // Adminが特定ユーザーを指定した場合 (Legacy support for single UID)
+        const target = await prisma.user.findUnique({ where: { uid: String(targetUid) } });
+        if (target) where.userId = target.id;
+      }
     }
 
     if (start || end) {
