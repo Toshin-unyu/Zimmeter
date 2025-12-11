@@ -310,6 +310,46 @@ router.post('/logs/switch', async (req: Request, res: Response) => {
   }
 });
 
+// PATCH /api/logs/:id
+// ログ修正
+router.patch('/logs/:id', async (req: Request, res: Response) => {
+  try {
+    const currentUser = getUser(req);
+    const { id } = req.params;
+    const { categoryId } = req.body;
+
+    const log = await prisma.workLog.findUnique({ where: { id: Number(id) } });
+    if (!log) return res.status(404).json({ error: 'Log not found' });
+
+    // 権限チェック (Admin or Owner)
+    if (log.userId !== currentUser.id && currentUser.role !== 'ADMIN') {
+        return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    // カテゴリ情報の取得 (スナップショット更新用)
+    const category = await prisma.category.findUnique({
+      where: { id: Number(categoryId) },
+    });
+
+    if (!category) {
+      return res.status(404).json({ error: 'Category not found' });
+    }
+
+    const updatedLog = await prisma.workLog.update({
+      where: { id: Number(id) },
+      data: {
+        categoryId: Number(categoryId),
+        categoryNameSnapshot: category.name,
+      },
+    });
+
+    res.json(updatedLog);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to update log' });
+  }
+});
+
 // DELETE /api/logs/:id
 router.delete('/logs/:id', async (req: Request, res: Response) => {
   try {

@@ -1,43 +1,46 @@
 import { useState, useEffect } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/axios';
-import { CATEGORIES } from '../lib/constants';
+import type { Category } from '../lib/constants';
+
+interface WorkLog {
+  id: number;
+  categoryId: number;
+  categoryNameSnapshot: string;
+}
 
 interface EditLogModalProps {
   isOpen: boolean;
   onClose: () => void;
-  log: {
-    id: number;
-    categoryId: string;
-    categoryLabel: string;
-  } | null;
+  log: WorkLog | null;
+  categories: Category[];
 }
 
-export const EditLogModal = ({ isOpen, onClose, log }: EditLogModalProps) => {
+export const EditLogModal = ({ isOpen, onClose, log, categories }: EditLogModalProps) => {
   const queryClient = useQueryClient();
-  const [selectedCat, setSelectedCat] = useState<string | null>(null);
+  const [selectedCatId, setSelectedCatId] = useState<number | null>(null);
 
   useEffect(() => {
     if (log) {
-      setSelectedCat(log.categoryId);
+        setSelectedCatId(log.categoryId);
     }
   }, [log]);
 
   const updateMutation = useMutation({
-    mutationFn: async (data: { categoryId: string; categoryLabel: string }) => {
+    mutationFn: async (data: { categoryId: number }) => {
       if (!log) return;
-      return api.patch(`/logs/${log.id}`, { ...data, isManual: true });
+      return api.patch(`/logs/${log.id}`, data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['history'] });
+      queryClient.invalidateQueries({ queryKey: ['activeLog'] });
       onClose();
     },
   });
 
   const handleSave = () => {
-    if (!selectedCat) return;
-    const cat = CATEGORIES[selectedCat];
-    updateMutation.mutate({ categoryId: cat.id, categoryLabel: cat.label });
+    if (!selectedCatId) return;
+    updateMutation.mutate({ categoryId: selectedCatId });
   };
 
   if (!isOpen || !log) return null;
@@ -49,18 +52,20 @@ export const EditLogModal = ({ isOpen, onClose, log }: EditLogModalProps) => {
         <p className="mb-4 text-gray-600">正しい作業内容を選択してください。</p>
         
         <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto mb-6 p-1">
-          {Object.values(CATEGORIES).map(cat => (
+          {categories.map(cat => (
             <button
               key={cat.id}
-              onClick={() => setSelectedCat(cat.id)}
+              onClick={() => setSelectedCatId(cat.id)}
               className={`p-3 rounded-lg border text-left transition-all ${
-                  selectedCat === cat.id 
+                  selectedCatId === cat.id 
                   ? 'ring-2 ring-blue-500 bg-blue-50 border-blue-500 font-bold' 
                   : 'hover:bg-gray-50 border-gray-200'
               }`}
             >
-              <span className={`inline-block w-2 h-2 rounded-full mr-2 ${cat.color.split(' ')[0]}`}></span>
-              {cat.label}
+              <span 
+                className={`inline-block w-2 h-2 rounded-full mr-2 ${cat.color?.split(' ')[0] || 'bg-gray-400'}`}
+              ></span>
+              {cat.name}
             </button>
           ))}
         </div>
@@ -69,7 +74,7 @@ export const EditLogModal = ({ isOpen, onClose, log }: EditLogModalProps) => {
           <button onClick={onClose} className="px-4 py-2 border rounded-lg hover:bg-gray-50">キャンセル</button>
           <button 
             onClick={handleSave} 
-            disabled={!selectedCat || updateMutation.isPending}
+            disabled={!selectedCatId || updateMutation.isPending}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-bold shadow-sm"
           >
             保存

@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/axios';
-import { CATEGORIES } from '../lib/constants';
+import { getCategoryColor } from '../lib/constants';
+import type { Category } from '../lib/constants';
 
 interface AwayModalProps {
   isOpen: boolean;
@@ -11,25 +12,42 @@ interface AwayModalProps {
 
 export const AwayModal = ({ isOpen, onClose, logId }: AwayModalProps) => {
   const queryClient = useQueryClient();
-  const [selectedCat, setSelectedCat] = useState<string | null>(null);
+  const [selectedCatId, setSelectedCatId] = useState<number | null>(null);
 
-  // Filter categories relevant for away reasons
-  const reasons = Object.values(CATEGORIES).filter(c => c.id !== 'away');
+  // Fetch categories
+  const { data: categories } = useQuery({
+    queryKey: ['categories'],
+    queryFn: async () => {
+      const res = await api.get<Category[]>('/categories');
+      return res.data.map(c => ({
+        ...c,
+        ...getCategoryColor(c.name)
+      }));
+    },
+    staleTime: 1000 * 60 * 5,
+  });
+
+  // Filter categories relevant for away reasons (exclude "離席")
+  const reasons = categories?.filter(c => !c.name.includes('離席')) || [];
 
   const mutation = useMutation({
-    mutationFn: async (data: { categoryId: string; categoryLabel: string }) => {
+    mutationFn: async (data: { categoryId: number }) => {
       return api.patch(`/logs/${logId}`, { ...data, isManual: true });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['history'] }); // Assuming key is 'history'
+      queryClient.invalidateQueries({ queryKey: ['history'] });
+      queryClient.invalidateQueries({ queryKey: ['activeLog'] });
       onClose();
     },
   });
 
   const handleSave = () => {
-    if (!selectedCat) return;
-    const cat = CATEGORIES[selectedCat];
-    mutation.mutate({ categoryId: cat.id, categoryLabel: cat.label });
+    if (!selectedCatId) return;
+    mutation.mutate({ categoryId: selectedCatId });
+  };
+
+  const handleContinueAway = () => {
+      onClose();
   };
 
   if (!isOpen) return null;
@@ -44,23 +62,22 @@ export const AwayModal = ({ isOpen, onClose, logId }: AwayModalProps) => {
           {reasons.map(cat => (
             <button
               key={cat.id}
-              onClick={() => setSelectedCat(cat.id)}
+              onClick={() => setSelectedCatId(cat.id)}
               className={`p-3 rounded-lg border text-left transition-all ${
-                  selectedCat === cat.id 
+                  selectedCatId === cat.id 
                   ? 'ring-2 ring-blue-500 bg-blue-50 border-blue-500 font-bold' 
                   : 'hover:bg-gray-50 border-gray-200'
               }`}
             >
-              {cat.label}
+              <span 
+                className={`inline-block w-2 h-2 rounded-full mr-2 ${cat.color?.split(' ')[0] || 'bg-gray-400'}`}
+              ></span>
+              {cat.name}
             </button>
           ))}
           <button
-              onClick={() => setSelectedCat('away')}
-              className={`p-3 rounded-lg border text-left transition-all ${
-                  selectedCat === 'away' 
-                  ? 'ring-2 ring-blue-500 bg-blue-50 border-blue-500 font-bold' 
-                  : 'hover:bg-gray-50 border-gray-200 text-gray-500'
-              }`}
+              onClick={handleContinueAway}
+              className="p-3 rounded-lg border text-left transition-all hover:bg-gray-50 border-gray-200 text-gray-500"
           >
               そのまま離席
           </button>
@@ -70,7 +87,7 @@ export const AwayModal = ({ isOpen, onClose, logId }: AwayModalProps) => {
           <button onClick={onClose} className="px-4 py-2 border rounded-lg hover:bg-gray-50">スキップ</button>
           <button 
             onClick={handleSave} 
-            disabled={!selectedCat || mutation.isPending}
+            disabled={!selectedCatId || mutation.isPending}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-bold shadow-sm"
           >
             確定

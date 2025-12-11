@@ -1,7 +1,10 @@
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../lib/axios';
-import { Activity, Clock } from 'lucide-react';
+import { Activity, Clock, Pencil } from 'lucide-react';
 import { getCategoryColor } from '../../lib/constants';
+import type { Category } from '../../lib/constants';
+import { EditLogModal } from '../EditLogModal';
 
 interface MonitorLog {
   id: number;
@@ -15,6 +18,8 @@ interface MonitorLog {
 }
 
 export const MonitorTable = () => {
+  const [editingLog, setEditingLog] = useState<MonitorLog | null>(null);
+
   const { data: logs, isLoading } = useQuery({
     queryKey: ['monitorLogs'],
     queryFn: async () => {
@@ -24,70 +29,102 @@ export const MonitorTable = () => {
     refetchInterval: 30000, // 30秒更新
   });
 
+  const { data: categories } = useQuery({
+    queryKey: ['categories'],
+    queryFn: async () => {
+      const res = await api.get<Category[]>('/categories');
+      // Assign colors on frontend
+      return res.data.map(c => ({
+        ...c,
+        ...getCategoryColor(c.name)
+      }));
+    },
+    staleTime: 1000 * 60 * 5, // 5 minutes
+  });
+
   if (isLoading) return <div className="p-4">Loading monitor...</div>;
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden h-full flex flex-col">
-      <div className="p-4 border-b border-gray-100 bg-gray-50 flex justify-between items-center shrink-0">
-        <h3 className="font-bold text-gray-700 flex items-center gap-2">
-          <Activity size={20} />
-          直近アクティビティ (24h)
-        </h3>
-        <span className="text-xs text-gray-400">{logs?.length} records</span>
-      </div>
-      
-      <div className="overflow-y-auto flex-1">
-        <table className="w-full text-sm text-left">
-          <thead className="text-gray-500 bg-gray-50 border-b sticky top-0 z-10">
-            <tr>
-              <th className="p-3 font-medium">Time</th>
-              <th className="p-3 font-medium">User</th>
-              <th className="p-3 font-medium">Task</th>
-              <th className="p-3 font-medium text-right">Duration</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {logs?.map((log) => {
-              // 簡易的に色を取得
-              const { color: bgClass } = getCategoryColor(log.categoryNameSnapshot);
-              // bg-xxx-100 -> text-xxx-600 のような簡易変換
-              const color = bgClass.split(' ')[0].replace('bg-', 'text-').replace('-100', '-600').replace('-50', '-500').replace('slate-800', 'slate-600');
-              
-              const isLongDuration = !log.duration && (new Date().getTime() - new Date(log.startTime).getTime()) > 1000 * 60 * 60 * 3; // 3時間以上経過
+    <>
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden h-full flex flex-col">
+        <div className="p-4 border-b border-gray-100 bg-gray-50 flex justify-between items-center shrink-0">
+          <h3 className="font-bold text-gray-700 flex items-center gap-2">
+            <Activity size={20} />
+            直近アクティビティ (24h)
+          </h3>
+          <span className="text-xs text-gray-400">{logs?.length} records</span>
+        </div>
+        
+        <div className="overflow-y-auto flex-1">
+          <table className="w-full text-sm text-left">
+            <thead className="text-gray-500 bg-gray-50 border-b sticky top-0 z-10">
+              <tr>
+                <th className="p-3 font-medium">Time</th>
+                <th className="p-3 font-medium">User</th>
+                <th className="p-3 font-medium">Task</th>
+                <th className="p-3 font-medium text-right">Duration</th>
+                <th className="p-3 font-medium text-center">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {logs?.map((log) => {
+                // 簡易的に色を取得
+                const { color: bgClass } = getCategoryColor(log.categoryNameSnapshot);
+                // bg-xxx-100 -> text-xxx-600 のような簡易変換
+                const color = bgClass.split(' ')[0].replace('bg-', 'text-').replace('-100', '-600').replace('-50', '-500').replace('slate-800', 'slate-600');
+                
+                const isLongDuration = !log.duration && (new Date().getTime() - new Date(log.startTime).getTime()) > 1000 * 60 * 60 * 3; // 3時間以上経過
 
-              return (
-                <tr key={log.id} className="hover:bg-blue-50/50 transition-colors">
-                  <td className="p-3 font-mono text-gray-500 whitespace-nowrap">
-                    {new Date(log.startTime).toLocaleString([], { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                  </td>
-                  <td className="p-3">
-                    <div className="font-medium text-gray-900">{log.user.name}</div>
-                    <div className="text-xs text-gray-400">{log.user.uid}</div>
-                  </td>
-                  <td className="p-3">
-                    <span className={`font-medium ${color}`}>
-                      {log.categoryNameSnapshot}
-                    </span>
-                  </td>
-                  <td className="p-3 text-right font-mono text-gray-600">
-                    {log.duration ? (
-                       <span>{Math.floor(log.duration / 60)}m</span>
-                    ) : (
-                       <span className={`inline-flex items-center gap-1 ${isLongDuration ? 'text-red-500 font-bold animate-pulse' : 'text-green-600'}`}>
-                         <Clock size={12} />
-                         Running
-                       </span>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-            {logs?.length === 0 && (
-                <tr><td colSpan={4} className="p-8 text-center text-gray-400">履歴がありません</td></tr>
-            )}
-          </tbody>
-        </table>
+                return (
+                  <tr key={log.id} className="hover:bg-blue-50/50 transition-colors">
+                    <td className="p-3 font-mono text-gray-500 whitespace-nowrap">
+                      {new Date(log.startTime).toLocaleString([], { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                    </td>
+                    <td className="p-3">
+                      <div className="font-medium text-gray-900">{log.user.name}</div>
+                      <div className="text-xs text-gray-400">{log.user.uid}</div>
+                    </td>
+                    <td className="p-3">
+                      <span className={`font-medium ${color}`}>
+                        {log.categoryNameSnapshot}
+                      </span>
+                    </td>
+                    <td className="p-3 text-right font-mono text-gray-600">
+                      {log.duration ? (
+                         <span>{Math.floor(log.duration / 60)}m</span>
+                      ) : (
+                         <span className={`inline-flex items-center gap-1 ${isLongDuration ? 'text-red-500 font-bold animate-pulse' : 'text-green-600'}`}>
+                           <Clock size={12} />
+                           Running
+                         </span>
+                      )}
+                    </td>
+                    <td className="p-3 text-center">
+                      <button
+                        onClick={() => setEditingLog(log)}
+                        className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                        title="修正"
+                      >
+                        <Pencil size={16} />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+              {logs?.length === 0 && (
+                  <tr><td colSpan={5} className="p-8 text-center text-gray-400">履歴がありません</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
-    </div>
+
+      <EditLogModal
+        isOpen={!!editingLog}
+        onClose={() => setEditingLog(null)}
+        log={editingLog}
+        categories={categories || []}
+      />
+    </>
   );
 };

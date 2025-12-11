@@ -1,12 +1,13 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { QueryClient, QueryClientProvider, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Settings, Download, History, AlertCircle } from 'lucide-react';
+import { Settings, Download, History, AlertCircle, Pencil } from 'lucide-react';
 import { getCategoryColor } from './lib/constants';
 import type { Category } from './lib/constants';
 import { api } from './lib/axios';
 import { TaskButton } from './components/TaskButton';
 import { SettingsModal } from './components/SettingsModal';
 import { HistoryModal } from './components/HistoryModal';
+import { EditLogModal } from './components/EditLogModal';
 import { LoginModal } from './components/LoginModal';
 import { StatusGuard } from './components/Common/StatusGuard';
 import { useUserStatus } from './hooks/useUserStatus';
@@ -43,6 +44,7 @@ function ZimmeterApp() {
   const [showIdleAlert, setShowIdleAlert] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [activeTab, setActiveTab] = useState<'main' | 'admin'>('main');
+  const [editingLog, setEditingLog] = useState<WorkLog | null>(null);
 
   const { data: userStatus } = useUserStatus(!!uid);
   const { showToast } = useToast();
@@ -303,9 +305,20 @@ function ZimmeterApp() {
                             <div className={`w-3 h-3 rounded-full animate-pulse ${activeLogQuery.data ? 'bg-green-500' : 'bg-gray-300'}`}></div>
                             <div>
                                 <p className="text-sm text-gray-400 font-medium uppercase tracking-wider">Current Task</p>
-                                <h2 className="text-3xl font-bold text-gray-800">
-                                    {activeLogQuery.data ? activeLogQuery.data.categoryNameSnapshot : '計測待機中'}
-                                </h2>
+                                <div className="flex items-center gap-3">
+                                    <h2 className="text-3xl font-bold text-gray-800">
+                                        {activeLogQuery.data ? activeLogQuery.data.categoryNameSnapshot : '計測待機中'}
+                                    </h2>
+                                    {activeLogQuery.data && (
+                                        <button
+                                            onClick={() => setEditingLog(activeLogQuery.data)}
+                                            className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors"
+                                            title="修正"
+                                        >
+                                            <Pencil size={20} />
+                                        </button>
+                                    )}
+                                </div>
                             </div>
                         </div>
                         <div className="text-right w-full md:w-auto">
@@ -355,9 +368,16 @@ function ZimmeterApp() {
             isOpen={showHistory}
             onClose={() => setShowHistory(false)}
             logs={historyQuery.data || []}
-            onEdit={() => console.log('Edit feature temporarily disabled')}
+            onEdit={(log) => setEditingLog(log)}
             onDelete={handleDeleteLog}
             mergedCategories={categoriesQuery.data?.reduce((acc, c) => ({...acc, [c.id]: c}), {}) || {}}
+        />
+
+        <EditLogModal
+            isOpen={!!editingLog}
+            onClose={() => setEditingLog(null)}
+            log={editingLog}
+            categories={categoriesQuery.data || []}
         />
 
         {isSettingsOpen && (
