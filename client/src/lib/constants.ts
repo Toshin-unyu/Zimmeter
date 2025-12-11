@@ -7,6 +7,7 @@ export interface Category {
   name: string;
   type: 'SYSTEM' | 'CUSTOM';
   priority: number;
+  defaultList?: 'PRIMARY' | 'SECONDARY' | 'HIDDEN';
   // UI helper props
   color?: string;
   borderColor?: string;

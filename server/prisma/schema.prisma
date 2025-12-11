@@ -23,6 +23,12 @@ enum CategoryType {
   CUSTOM // 作成したユーザーのみ編集可能 (個人用)
 }
 
+enum DefaultListType {
+  PRIMARY   // メインボタン
+  SECONDARY // サブボタン
+  HIDDEN    // 非表示
+}
+
 enum Role {
   ADMIN // 管理者
   USER  // 一般ユーザー
@@ -74,6 +80,7 @@ model Category {
   
   isDeleted   Boolean      @default(false) // 論理削除
   priority    Int          @default(0)     // 表示順序
+  defaultList DefaultListType @default(SECONDARY) // デフォルトの表示先
 
   logs        WorkLog[]
 

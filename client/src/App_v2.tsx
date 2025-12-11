@@ -101,6 +101,7 @@ function ZimmeterApp() {
       }));
     },
     enabled: !!uid, 
+    refetchInterval: 3000,
   });
 
   // 2. Fetch Active Log
@@ -112,7 +113,7 @@ function ZimmeterApp() {
       return res.data;
     },
     enabled: !!uid,
-    refetchInterval: 60000,
+    refetchInterval: 3000,
   });
 
   // Idle Alert
@@ -137,6 +138,7 @@ function ZimmeterApp() {
       } catch { return null; }
     },
     enabled: !!uid,
+    refetchInterval: 3000,
   });
 
   // 4. Fetch History
@@ -158,16 +160,28 @@ function ZimmeterApp() {
     let primaryIds = prefs.primaryButtons || [];
     let secondaryIds = prefs.secondaryButtons || [];
 
-    // If no settings, use default logic (top 6 as primary, rest as secondary)
+    const sorted = [...allCats].sort((a, b) => a.priority - b.priority);
+
+    // If no settings (or reset), use default logic (based on defaultList)
     if (primaryIds.length === 0 && secondaryIds.length === 0) {
-       const sorted = [...allCats].sort((a, b) => a.priority - b.priority);
-       primaryIds = sorted.slice(0, 6).map(c => c.id);
-       secondaryIds = sorted.slice(6).map(c => c.id);
+       // defaultList='PRIMARY' -> Main
+       // defaultList='HIDDEN'  -> Hidden
+       // Otherwise -> Secondary
+       primaryIds = sorted.filter(c => c.defaultList === 'PRIMARY').map(c => c.id);
+       secondaryIds = sorted
+         .filter(c => c.defaultList !== 'PRIMARY' && c.defaultList !== 'HIDDEN')
+         .map(c => c.id);
     }
 
     return {
-        primaryButtons: allCats.filter(c => primaryIds.includes(c.id)),
-        secondaryButtons: allCats.filter(c => secondaryIds.includes(c.id)),
+        // ID順序を維持するために map を使用し、存在しないものは除外する
+        primaryButtons: primaryIds
+            .map(id => allCats.find(c => c.id === id))
+            .filter((c) => !!c) as Category[],
+            
+        secondaryButtons: secondaryIds
+            .map(id => allCats.find(c => c.id === id))
+            .filter((c) => !!c) as Category[],
     };
   }, [categoriesQuery.data, settingsQuery.data]);
 
@@ -346,17 +360,17 @@ function ZimmeterApp() {
             mergedCategories={categoriesQuery.data?.reduce((acc, c) => ({...acc, [c.id]: c}), {}) || {}}
         />
 
-        <SettingsModal
-            isOpen={isSettingsOpen}
-            onClose={() => setIsSettingsOpen(false)}
-            uid={uid}
-            categories={categoriesQuery.data || []}
-            initialPrimary={primaryButtons.map(c => c.id)}
-            initialSecondary={secondaryButtons.map(c => c.id)}
-        />
+        {isSettingsOpen && (
+            <SettingsModal
+                isOpen={isSettingsOpen}
+                onClose={() => setIsSettingsOpen(false)}
+                uid={uid}
+                categories={categoriesQuery.data || []}
+                initialPrimary={primaryButtons.map(c => c.id)}
+                initialSecondary={secondaryButtons.map(c => c.id)}
+            />
+        )}
 
-        {/* SettingsModal and others need updates too, but for MVP main screen: */}
-        
         <LoginModal 
             isOpen={showLoginModal}
             onSubmit={handleLogin}

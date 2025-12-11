@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { Category } from '../lib/constants';
 import { getCategoryColor } from '../lib/constants';
@@ -31,13 +31,6 @@ export const SettingsModal = ({ isOpen, onClose, uid, categories, initialPrimary
   const [newLabel, setNewLabel] = useState('');
   const [editCategory, setEditCategory] = useState<Category | null>(null);
 
-  useEffect(() => {
-    if (isOpen) {
-      setPrimary(initialPrimary);
-      setSecondary(initialSecondary);
-    }
-  }, [isOpen, initialPrimary, initialSecondary]);
-
   // --- API Mutations ---
 
   // 1. Save Display Settings (Preferences)
@@ -58,7 +51,7 @@ export const SettingsModal = ({ isOpen, onClose, uid, categories, initialPrimary
 
   // 2. Create Category
   const createMutation = useMutation({
-    mutationFn: async (data: { name: string; type: 'SYSTEM' | 'CUSTOM' }) => {
+    mutationFn: async (data: { name: string; type: 'SYSTEM' | 'CUSTOM'; priority?: number; defaultList?: 'PRIMARY' | 'SECONDARY' | 'HIDDEN' }) => {
       return api.post('/categories', data);
     },
     onSuccess: (res) => {
@@ -81,8 +74,8 @@ export const SettingsModal = ({ isOpen, onClose, uid, categories, initialPrimary
 
   // 3. Update Category
   const updateMutation = useMutation({
-    mutationFn: async (data: { id: number; name: string }) => {
-      return api.put(`/categories/${data.id}`, { name: data.name });
+    mutationFn: async (data: { id: number; name?: string; defaultList?: 'PRIMARY' | 'SECONDARY' | 'HIDDEN' }) => {
+      return api.put(`/categories/${data.id}`, data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['categories'] });
@@ -114,7 +107,7 @@ export const SettingsModal = ({ isOpen, onClose, uid, categories, initialPrimary
 
   // 5. Reorder Categories
   const reorderMutation = useMutation({
-    mutationFn: async (orders: { id: number; priority: number }[]) => {
+    mutationFn: async (orders: { id: number; priority: number; defaultList?: string }[]) => {
       return api.put('/categories/reorder', { orders });
     },
     onSuccess: () => {
@@ -126,13 +119,60 @@ export const SettingsModal = ({ isOpen, onClose, uid, categories, initialPrimary
     }
   });
 
+  // 6. Reset Settings
+  const resetMutation = useMutation({
+    mutationFn: async () => {
+      return api.delete('/settings');
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['settings', uid] });
+      showToast('設定を初期状態に戻しました', 'success');
+      onClose();
+    },
+    onError: () => {
+      showToast('設定のリセットに失敗しました', 'error');
+    }
+  });
+
   // --- Handlers ---
 
   const handleSaveSettings = () => {
-    settingsMutation.mutate({ 
-      primaryButtons: primary, 
-      secondaryButtons: secondary
-    });
+    if (isAdmin) {
+      // Admin: Update Global Priorities (Category.priority)
+      // 1. Gather all IDs in order: Primary -> Secondary -> Hidden
+      const hiddenIds = categories
+        .filter(c => !primary.includes(c.id) && !secondary.includes(c.id))
+        .map(c => c.id);
+
+      const allOrderedIds = [...primary, ...secondary, ...hiddenIds];
+
+      // 2. Create update payload
+      const updates = allOrderedIds.map((id, index) => {
+        let defaultList = 'HIDDEN';
+        if (primary.includes(id)) defaultList = 'PRIMARY';
+        else if (secondary.includes(id)) defaultList = 'SECONDARY';
+        
+        return {
+            id,
+            priority: index * 10,
+            defaultList
+        };
+      });
+
+      // 3. Update Priorities & Visibility
+      reorderMutation.mutate(updates, {
+        onSuccess: () => {
+           // 4. Reset Admin's personal settings to ensure they see the global defaults
+           resetMutation.mutate(); 
+        }
+      });
+    } else {
+      // User: Save Personal Preferences
+      settingsMutation.mutate({ 
+        primaryButtons: primary, 
+        secondaryButtons: secondary
+      });
+    }
   };
 
   const handleCreateOrUpdate = () => {
@@ -145,7 +185,15 @@ export const SettingsModal = ({ isOpen, onClose, uid, categories, initialPrimary
       const type = isAdmin ? 'SYSTEM' : 'CUSTOM';
       // 新規作成時は最後尾に追加（現在の最大priority + 10）
       const maxPriority = categories.length > 0 ? Math.max(...categories.map(c => c.priority || 0)) : 0;
-      createMutation.mutate({ name: newLabel.trim(), type, priority: maxPriority + 10 } as any);
+      
+      const defaultList = targetList === 'primary' ? 'PRIMARY' : 'SECONDARY';
+      
+      createMutation.mutate({ 
+        name: newLabel.trim(), 
+        type, 
+        priority: maxPriority + 10,
+        defaultList
+      });
     }
   };
 
@@ -158,26 +206,6 @@ export const SettingsModal = ({ isOpen, onClose, uid, categories, initialPrimary
     if (window.confirm('このカテゴリを削除しますか？\n（過去の履歴データは保持されます）')) {
       deleteMutation.mutate(id);
     }
-  };
-
-  const handleMoveCategory = (index: number, direction: 'up' | 'down') => {
-    if (direction === 'up' && index === 0) return;
-    if (direction === 'down' && index === categories.length - 1) return;
-
-    const newCategories = [...categories];
-    const targetIndex = direction === 'up' ? index - 1 : index + 1;
-    
-    // Swap
-    [newCategories[index], newCategories[targetIndex]] = [newCategories[targetIndex], newCategories[index]];
-
-    // Recalculate priorities
-    // リストの並び順（index）× 10 を新しいpriorityとする
-    const updates = newCategories.map((cat, idx) => ({
-      id: cat.id,
-      priority: idx * 10
-    }));
-
-    reorderMutation.mutate(updates);
   };
 
   const handleCancelEdit = () => {
@@ -267,37 +295,53 @@ export const SettingsModal = ({ isOpen, onClose, uid, categories, initialPrimary
                                         <span className="text-xs bg-gray-200 text-gray-500 px-1 rounded">SYS</span>
                                     )}
                                 </div>
-                                <div className="flex gap-4">
-                                     <label className="flex items-center gap-1 cursor-pointer">
-                                        <input 
-                                            type="radio" 
-                                            name={`setting-${cat.id}`} 
-                                            checked={isPrimary} 
-                                            onChange={() => handleChangeVisibility(cat.id, 'primary')}
-                                            className="w-4 h-4 text-blue-600"
-                                        /> 
-                                        <span className="text-sm">メイン</span>
-                                     </label>
-                                     <label className="flex items-center gap-1 cursor-pointer">
-                                        <input 
-                                            type="radio" 
-                                            name={`setting-${cat.id}`} 
-                                            checked={isSecondary} 
-                                            onChange={() => handleChangeVisibility(cat.id, 'secondary')}
-                                            className="w-4 h-4 text-blue-600"
-                                        /> 
-                                        <span className="text-sm">サブ</span>
-                                     </label>
-                                     <label className="flex items-center gap-1 cursor-pointer">
-                                        <input 
-                                            type="radio" 
-                                            name={`setting-${cat.id}`} 
-                                            checked={!isPrimary && !isSecondary} 
-                                            onChange={() => handleChangeVisibility(cat.id, 'hidden')}
-                                            className="w-4 h-4 text-blue-600"
-                                        /> 
-                                        <span className="text-sm text-gray-500">非表示</span>
-                                     </label>
+                                <div className="flex gap-4 items-center">
+                                     {/* Unified Visibility Control */}
+                                     <div className="flex bg-white rounded-lg border overflow-hidden">
+                                         {/* Main Button */}
+                                         <button
+                                             onClick={() => {
+                                                 handleChangeVisibility(cat.id, 'primary');
+                                             }}
+                                             className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                                                 isPrimary
+                                                     ? 'bg-blue-100 text-blue-700' 
+                                                     : 'hover:bg-gray-50 text-gray-600'
+                                             }`}
+                                         >
+                                             メイン
+                                         </button>
+                                         <div className="w-px bg-gray-200"></div>
+                                         
+                                         {/* Sub Button */}
+                                         <button
+                                             onClick={() => {
+                                                 handleChangeVisibility(cat.id, 'secondary');
+                                             }}
+                                             className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                                                 isSecondary
+                                                     ? 'bg-blue-100 text-blue-700' 
+                                                     : 'hover:bg-gray-50 text-gray-600'
+                                             }`}
+                                         >
+                                             サブ
+                                         </button>
+                                         <div className="w-px bg-gray-200"></div>
+
+                                         {/* Hidden Button */}
+                                         <button
+                                             onClick={() => {
+                                                 handleChangeVisibility(cat.id, 'hidden');
+                                             }}
+                                             className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                                                 (!isPrimary && !isSecondary)
+                                                     ? 'bg-gray-200 text-gray-800' 
+                                                     : 'hover:bg-gray-50 text-gray-400'
+                                             }`}
+                                         >
+                                             非表示
+                                         </button>
+                                     </div>
                                 </div>
                             </div>
                         )
@@ -471,7 +515,7 @@ export const SettingsModal = ({ isOpen, onClose, uid, categories, initialPrimary
                     <div className="space-y-4 pt-4 border-t">
                         <h3 className="font-bold text-gray-800">カテゴリ一覧</h3>
                         <div className="space-y-2">
-                            {categories.map((cat, index) => {
+                            {categories.map((cat) => {
                                 const isSystem = cat.type === 'SYSTEM';
                                 // Edit allowed if: (Admin) OR (Custom & User)
                                 const canEdit = isAdmin || (!isSystem);
@@ -486,23 +530,6 @@ export const SettingsModal = ({ isOpen, onClose, uid, categories, initialPrimary
                                         <div className="flex gap-1 items-center">
                                             {canEdit ? (
                                                 <>
-                                                    <button 
-                                                        onClick={() => handleMoveCategory(index, 'up')}
-                                                        disabled={index === 0 || reorderMutation.isPending}
-                                                        className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-30"
-                                                        title="上へ移動"
-                                                    >
-                                                        <ArrowUp size={18} />
-                                                    </button>
-                                                    <button 
-                                                        onClick={() => handleMoveCategory(index, 'down')}
-                                                        disabled={index === categories.length - 1 || reorderMutation.isPending}
-                                                        className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-30"
-                                                        title="下へ移動"
-                                                    >
-                                                        <ArrowDown size={18} />
-                                                    </button>
-                                                    <div className="w-px h-6 bg-gray-200 mx-1"></div>
                                                     <button 
                                                         onClick={() => handleEditClick(cat)}
                                                         className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
@@ -533,15 +560,28 @@ export const SettingsModal = ({ isOpen, onClose, uid, categories, initialPrimary
             )}
         </div>
 
-        <div className="mt-6 flex justify-end gap-2 sticky bottom-0 bg-white pt-2 border-t shrink-0">
-            <button onClick={onClose} className="px-4 py-2 border rounded-lg hover:bg-gray-50">キャンセル</button>
+        <div className="mt-6 flex justify-between gap-2 sticky bottom-0 bg-white pt-2 border-t shrink-0">
             <button 
-                onClick={handleSaveSettings} 
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-                disabled={settingsMutation.isPending}
+                onClick={() => {
+                    if (window.confirm('現在の表示・並び順設定を破棄し、管理者の最新設定に戻しますか？')) {
+                        resetMutation.mutate();
+                    }
+                }}
+                className="px-4 py-2 text-red-500 border border-red-200 rounded-lg hover:bg-red-50 text-sm disabled:opacity-50"
+                disabled={resetMutation.isPending}
             >
-                {settingsMutation.isPending ? '保存中...' : '設定を保存'}
+                管理者設定に戻す
             </button>
+            <div className="flex gap-2">
+                <button onClick={onClose} className="px-4 py-2 border rounded-lg hover:bg-gray-50">キャンセル</button>
+                <button 
+                    onClick={handleSaveSettings} 
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                    disabled={settingsMutation.isPending}
+                >
+                    {settingsMutation.isPending ? '保存中...' : '設定を保存'}
+                </button>
+            </div>
         </div>
       </div>
     </div>
