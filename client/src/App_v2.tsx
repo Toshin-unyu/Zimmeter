@@ -45,6 +45,7 @@ function ZimmeterApp() {
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [activeTab, setActiveTab] = useState<'main' | 'admin'>('main');
   const [editingLog, setEditingLog] = useState<WorkLog | null>(null);
+  const [isAddingLog, setIsAddingLog] = useState(false);
 
   const { data: userStatus } = useUserStatus(!!uid);
   const { showToast } = useToast();
@@ -196,22 +197,6 @@ function ZimmeterApp() {
       queryClient.invalidateQueries({ queryKey: ['history', uid] });
     },
   });
-
-  const deleteMutation = useMutation({
-    mutationFn: async (id: number) => {
-      return api.delete(`/logs/${id}`);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['history', uid] });
-      queryClient.invalidateQueries({ queryKey: ['activeLog', uid] });
-    },
-  });
-
-  const handleDeleteLog = (id: number) => {
-    if (window.confirm('この履歴を削除してもよろしいですか？')) {
-      deleteMutation.mutate(id);
-    }
-  };
 
   const handleTaskSwitch = (catId: number) => {
     setShowIdleAlert(false);
@@ -369,14 +354,23 @@ function ZimmeterApp() {
             onClose={() => setShowHistory(false)}
             logs={historyQuery.data || []}
             onEdit={(log) => setEditingLog(log)}
-            onDelete={handleDeleteLog}
+            onAdd={() => setIsAddingLog(true)}
             mergedCategories={categoriesQuery.data?.reduce((acc, c) => ({...acc, [c.id]: c}), {}) || {}}
         />
 
         <EditLogModal
             isOpen={!!editingLog}
             onClose={() => setEditingLog(null)}
+            mode="edit"
             log={editingLog}
+            categories={categoriesQuery.data || []}
+        />
+
+        <EditLogModal
+            isOpen={isAddingLog}
+            onClose={() => setIsAddingLog(false)}
+            mode="create"
+            log={null}
             categories={categoriesQuery.data || []}
         />
 
