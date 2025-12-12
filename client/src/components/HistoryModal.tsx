@@ -1,4 +1,4 @@
-import { X, Pencil, Trash2 } from 'lucide-react';
+import { X, Pencil, Plus } from 'lucide-react';
 import type { Category } from '../lib/constants';
 import { getCategoryStyle } from '../lib/utils';
 
@@ -17,11 +17,11 @@ interface HistoryModalProps {
   onClose: () => void;
   logs: WorkLog[];
   onEdit: (log: WorkLog) => void;
-  onDelete: (id: number) => void;
+  onAdd: () => void;
   mergedCategories: Record<number, Category>;
 }
 
-export const HistoryModal = ({ isOpen, onClose, logs, onEdit, onDelete, mergedCategories }: HistoryModalProps) => {
+export const HistoryModal = ({ isOpen, onClose, logs, onEdit, onAdd, mergedCategories }: HistoryModalProps) => {
   if (!isOpen) return null;
 
   const formatDuration = (seconds: number) => {
@@ -36,9 +36,20 @@ export const HistoryModal = ({ isOpen, onClose, logs, onEdit, onDelete, mergedCa
       <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-xl">
         <div className="flex justify-between items-center mb-4 shrink-0">
           <h2 className="text-xl font-bold text-gray-700">本日の履歴</h2>
-          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded-full text-gray-500">
-            <X size={24} />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onAdd}
+              className="px-3 py-1.5 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-1"
+              title="追加"
+              type="button"
+            >
+              <Plus size={16} />
+              追加
+            </button>
+            <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded-full text-gray-500">
+              <X size={24} />
+            </button>
+          </div>
         </div>
 
         <div className="overflow-y-auto flex-1">
@@ -72,7 +83,7 @@ export const HistoryModal = ({ isOpen, onClose, logs, onEdit, onDelete, mergedCa
                         </div>
                       </td>
                       <td className="p-2 text-gray-500 font-mono text-center">
-                        {log.duration ? formatDuration(log.duration) : '-'}
+                        {log.duration && log.duration > 0 ? formatDuration(log.duration) : '進行中'}
                       </td>
                       <td className="p-2 text-xs text-gray-400 text-center">
                         {'自動'}
@@ -85,13 +96,6 @@ export const HistoryModal = ({ isOpen, onClose, logs, onEdit, onDelete, mergedCa
                             title="修正"
                             >
                             <Pencil size={16} />
-                            </button>
-                            <button
-                            onClick={() => onDelete(log.id)}
-                            className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
-                            title="削除"
-                            >
-                            <Trash2 size={16} />
                             </button>
                         </div>
                       </td>

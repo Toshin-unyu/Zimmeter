@@ -32,6 +32,71 @@ router.get('/users', async (req: Request, res: Response) => {
   }
 });
 
+// POST /api/logs/manual
+// 履歴を手動追加（startTimeのみ。当日の最後の履歴のstartTimeをendTimeとしてdurationを計算）
+router.post('/logs/manual', async (req: Request, res: Response) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Unauthorized', message: 'Missing user context (x-user-id header or uid query param)' });
+    }
+    const currentUser = req.user;
+    const { categoryId, startTime } = req.body;
+
+    if (!categoryId || !startTime) {
+      return res.status(400).json({ error: 'Missing categoryId/startTime' });
+    }
+
+    const start = new Date(startTime);
+    if (Number.isNaN(start.getTime())) {
+      return res.status(400).json({ error: 'Invalid startTime' });
+    }
+
+    // 当日の最後の履歴を取得して、その startTime を endTime とする
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const lastLog = await prisma.workLog.findFirst({
+      where: {
+        userId: currentUser.id,
+        startTime: { gte: today },
+      },
+      orderBy: { startTime: 'desc' },
+    });
+
+    const now = new Date();
+    if (now.getTime() <= start.getTime()) {
+      return res.status(400).json({ error: 'startTime must be before current time' });
+    }
+
+    const end = lastLog ? new Date(lastLog.startTime) : now;
+
+    const category = await prisma.category.findUnique({
+      where: { id: Number(categoryId) },
+    });
+
+    if (!category) {
+      return res.status(404).json({ error: 'Category not found' });
+    }
+
+    const duration = Math.floor((start.getTime() - end.getTime()) / 1000);
+
+    const created = await prisma.workLog.create({
+      data: {
+        userId: currentUser.id,
+        categoryId: Number(categoryId),
+        categoryNameSnapshot: category.name,
+        startTime: start,
+        endTime: end,
+        duration,
+      },
+    });
+
+    res.json(created);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to create log' });
+  }
+});
+
 // GET /api/users/me (Polling用)
 router.get('/users/me', async (req: Request, res: Response) => {
   try {
@@ -112,7 +177,7 @@ router.get('/categories', async (req: Request, res: Response) => {
 router.post('/categories', async (req: Request, res: Response) => {
   try {
     const currentUser = getUser(req);
-    const { name, type, priority, defaultList, bgColor, borderColor } = req.body;
+    const { name, type, priority } = req.body;
 
     // Admin以外がSYSTEMを作成しようとしたらエラー
     if (type === 'SYSTEM' && currentUser.role !== 'ADMIN') {
@@ -125,9 +190,6 @@ router.post('/categories', async (req: Request, res: Response) => {
         type: type || 'CUSTOM',
         createdById: currentUser.id, // SYSTEMでも作成者として残す
         priority: priority || 0,
-        defaultList: defaultList || 'SECONDARY',
-        bgColor,
-        borderColor,
       },
     });
     res.json(category);
@@ -151,9 +213,6 @@ router.put('/categories/reorder', async (req: Request, res: Response) => {
     await prisma.$transaction(
       orders.map((item: any) => {
         const data: any = { priority: item.priority };
-        if (item.defaultList) {
-          data.defaultList = item.defaultList;
-        }
         return prisma.category.update({
           where: { id: item.id },
           data,
@@ -173,7 +232,7 @@ router.put('/categories/:id', async (req: Request, res: Response) => {
   try {
     const currentUser = getUser(req);
     const { id } = req.params;
-    const { name, priority, defaultList, bgColor, borderColor } = req.body;
+    const { name, priority } = req.body;
 
     const category = await prisma.category.findUnique({ where: { id: Number(id) } });
     if (!category) return res.status(404).json({ error: 'Category not found' });
@@ -189,9 +248,6 @@ router.put('/categories/:id', async (req: Request, res: Response) => {
     const data: any = {};
     if (name !== undefined) data.name = name;
     if (priority !== undefined) data.priority = priority;
-    if (defaultList !== undefined) data.defaultList = defaultList;
-    if (bgColor !== undefined) data.bgColor = bgColor;
-    if (borderColor !== undefined) data.borderColor = borderColor;
 
     const updated = await prisma.category.update({
       where: { id: Number(id) },
@@ -395,11 +451,25 @@ router.get('/logs/history', async (req: Request, res: Response) => {
         },
       },
       orderBy: {
-        startTime: 'desc',
+        startTime: 'asc',
       },
       include: { category: true }
     });
-    res.json(logs);
+
+    // 各項目のdurationを「次の項目の開始時間との差」で再計算
+    const now = new Date();
+    const updatedLogs = logs.map((log, index) => {
+      const nextLog = logs[index + 1];
+      const endTime = nextLog ? new Date(nextLog.startTime) : now;
+      const duration = Math.floor((endTime.getTime() - new Date(log.startTime).getTime()) / 1000);
+      return {
+        ...log,
+        endTime: endTime.toISOString(),
+        duration,
+      };
+    });
+
+    res.json(updatedLogs.reverse()); // 表示は新しい順に戻す
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch history' });
   }
