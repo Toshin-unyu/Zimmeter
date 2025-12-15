@@ -17,14 +17,46 @@ interface MonitorLog {
   duration?: number;
 }
 
-export const MonitorTable = () => {
+interface MonitorTableProps {
+  selectedUsers?: number[];
+  timeRange?: 'daily' | 'weekly' | 'monthly';
+}
+
+export const MonitorTable = ({ selectedUsers = [], timeRange = 'daily' }: MonitorTableProps) => {
   const [editingLog, setEditingLog] = useState<MonitorLog | null>(null);
 
   const { data: logs, isLoading } = useQuery({
-    queryKey: ['monitorLogs'],
+    queryKey: ['monitorLogs', selectedUsers, timeRange],
     queryFn: async () => {
       const res = await api.get<MonitorLog[]>('/logs/monitor');
-      return res.data;
+      let filteredLogs = res.data;
+      
+      // Filter by selected users
+      if (selectedUsers.length > 0) {
+        filteredLogs = filteredLogs.filter(log => selectedUsers.includes(log.userId));
+      }
+      
+      // Filter by time range
+      const now = new Date();
+      const cutoffDate = new Date();
+      
+      switch (timeRange) {
+        case 'daily':
+          cutoffDate.setDate(now.getDate() - 1);
+          break;
+        case 'weekly':
+          cutoffDate.setDate(now.getDate() - 7);
+          break;
+        case 'monthly':
+          cutoffDate.setMonth(now.getMonth() - 1);
+          break;
+      }
+      
+      filteredLogs = filteredLogs.filter(log => 
+        new Date(log.startTime) >= cutoffDate
+      );
+      
+      return filteredLogs;
     },
     refetchInterval: 30000, // 30秒更新
   });
@@ -44,18 +76,54 @@ export const MonitorTable = () => {
 
   if (isLoading) return <div className="p-4">Loading monitor...</div>;
 
+  const getTimeRangeLabel = () => {
+    switch (timeRange) {
+      case 'daily': return '直近24h';
+      case 'weekly': return '直近7日間';
+      case 'monthly': return '直近30日間';
+      default: return '直近24h';
+    }
+  };
+
   return (
     <>
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden h-full flex flex-col">
         <div className="p-4 border-b border-gray-100 bg-gray-50 flex justify-between items-center shrink-0">
           <h3 className="font-bold text-gray-700 flex items-center gap-2">
             <Activity size={20} />
-            直近アクティビティ (24h)
+            アクティビティ ({getTimeRangeLabel()})
           </h3>
           <span className="text-xs text-gray-400">{logs?.length} records</span>
         </div>
         
-        <div className="flex-1 overflow-auto min-h-0">
+        <div 
+          className="flex-1 overflow-y-auto overflow-x-auto min-h-0 scroll-container"
+          style={{
+            scrollbarWidth: 'thin',
+            scrollbarColor: '#cbd5e1 #f1f5f9'
+          }}
+        >
+          <style>{`
+            .scroll-container::-webkit-scrollbar {
+              width: 8px;
+              height: 8px;
+            }
+            .scroll-container::-webkit-scrollbar-track {
+              background: #f1f5f9;
+              border-radius: 4px;
+            }
+            .scroll-container::-webkit-scrollbar-thumb {
+              background: #cbd5e1;
+              border-radius: 4px;
+              transition: background 0.2s;
+            }
+            .scroll-container::-webkit-scrollbar-thumb:hover {
+              background: #94a3b8;
+            }
+            .scroll-container::-webkit-scrollbar-corner {
+              background: #f1f5f9;
+            }
+          `}</style>
           <table className="w-full text-sm text-left whitespace-nowrap">
             <thead className="text-gray-500 bg-gray-50 border-b sticky top-0 z-10">
               <tr>
@@ -126,6 +194,7 @@ export const MonitorTable = () => {
       <EditLogModal
         isOpen={!!editingLog}
         onClose={() => setEditingLog(null)}
+        mode="edit"
         log={editingLog}
         categories={categories || []}
       />

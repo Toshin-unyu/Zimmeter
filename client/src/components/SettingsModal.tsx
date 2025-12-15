@@ -50,6 +50,20 @@ export const SettingsModal = ({ isOpen, onClose, uid, categories, initialPrimary
     }
   });
 
+  // 1.5. Auto-save Preferences (without closing modal)
+  const autoSaveMutation = useMutation({
+    mutationFn: async (data: { primaryButtons: number[]; secondaryButtons: number[] }) => {
+      return api.post('/settings', { preferences: data });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['settings', uid] });
+    },
+    onError: (error: any) => {
+      const msg = error.response?.data?.details || '設定の保存に失敗しました';
+      showToast(msg, 'error');
+    }
+  });
+
   // 2. Create Category
   const createMutation = useMutation({
     mutationFn: async (data: { 
@@ -63,7 +77,7 @@ export const SettingsModal = ({ isOpen, onClose, uid, categories, initialPrimary
       return api.post('/categories', data);
     },
     onSuccess: (res) => {
-      queryClient.invalidateQueries({ queryKey: ['categories'] });
+      queryClient.invalidateQueries({ queryKey: ['categories', uid] });
       // Add to list automatically
       const newId = res.data.id;
       if (targetList === 'primary') {
@@ -74,6 +88,27 @@ export const SettingsModal = ({ isOpen, onClose, uid, categories, initialPrimary
       setNewLabel('');
       setSelectedPreset(COLOR_PRESETS[0]);
       showToast('カテゴリを作成しました', 'success');
+      
+      // Auto-save preferences for non-admin users
+      if (!isAdmin) {
+        const updatedPrimary = targetList === 'primary' ? [...primary, newId] : primary;
+        const updatedSecondary = targetList === 'secondary' ? [...secondary, newId] : secondary;
+        
+        // Save immediately and then refresh categories to ensure main screen updates
+        autoSaveMutation.mutate({ 
+          primaryButtons: updatedPrimary, 
+          secondaryButtons: updatedSecondary 
+        }, {
+          onSuccess: () => {
+            // Force refresh both queries to ensure main screen sees the new category
+            queryClient.invalidateQueries({ queryKey: ['categories', uid] });
+            queryClient.invalidateQueries({ queryKey: ['settings', uid] });
+          }
+        });
+      } else {
+        // For admin, just refresh categories since they use system default
+        queryClient.invalidateQueries({ queryKey: ['categories', uid] });
+      }
     },
     onError: (error: any) => {
         const msg = error.response?.data?.details || error.response?.data?.error || 'カテゴリの作成に失敗しました';
@@ -93,7 +128,7 @@ export const SettingsModal = ({ isOpen, onClose, uid, categories, initialPrimary
       return api.put(`/categories/${data.id}`, data);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['categories'] });
+      queryClient.invalidateQueries({ queryKey: ['categories', uid] });
       setEditCategory(null);
       setNewLabel('');
       setSelectedPreset(COLOR_PRESETS[0]);
@@ -110,11 +145,30 @@ export const SettingsModal = ({ isOpen, onClose, uid, categories, initialPrimary
       return api.delete(`/categories/${id}`);
     },
     onSuccess: (_, id) => {
-      queryClient.invalidateQueries({ queryKey: ['categories'] });
+      queryClient.invalidateQueries({ queryKey: ['categories', uid] });
       // Remove from lists
-      setPrimary(prev => prev.filter(pid => pid !== id));
-      setSecondary(prev => prev.filter(sid => sid !== id));
+      const newPrimary = primary.filter(pid => pid !== id);
+      const newSecondary = secondary.filter(sid => sid !== id);
+      setPrimary(newPrimary);
+      setSecondary(newSecondary);
       showToast('カテゴリを削除しました', 'success');
+      
+      // Auto-save preferences for non-admin users
+      if (!isAdmin) {
+        autoSaveMutation.mutate({ 
+          primaryButtons: newPrimary, 
+          secondaryButtons: newSecondary 
+        }, {
+          onSuccess: () => {
+            // Force refresh both queries
+            queryClient.invalidateQueries({ queryKey: ['categories', uid] });
+            queryClient.invalidateQueries({ queryKey: ['settings', uid] });
+          }
+        });
+      } else {
+        // For admin, just refresh categories
+        queryClient.invalidateQueries({ queryKey: ['categories', uid] });
+      }
     },
     onError: () => {
         showToast('カテゴリの削除に失敗しました', 'error');
@@ -127,26 +181,14 @@ export const SettingsModal = ({ isOpen, onClose, uid, categories, initialPrimary
       return api.put('/categories/reorder', { orders });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['categories'] });
-      // showToast('順序を更新しました', 'success'); // 頻繁に出るとうるさいのでコメントアウト推奨だが、フィードバックとして残す
-    },
-    onError: () => {
-      showToast('順序の更新に失敗しました', 'error');
-    }
-  });
-
-  // 6. Reset Settings
-  const resetMutation = useMutation({
-    mutationFn: async () => {
-      return api.delete('/settings');
-    },
-    onSuccess: () => {
+      // Force refresh both queries for admin
+      queryClient.invalidateQueries({ queryKey: ['categories', uid] });
       queryClient.invalidateQueries({ queryKey: ['settings', uid] });
-      showToast('設定を初期状態に戻しました', 'success');
+      showToast('設定を保存しました', 'success');
       onClose();
     },
     onError: () => {
-      showToast('設定のリセットに失敗しました', 'error');
+      showToast('順序の更新に失敗しました', 'error');
     }
   });
 
@@ -176,12 +218,7 @@ export const SettingsModal = ({ isOpen, onClose, uid, categories, initialPrimary
       });
 
       // 3. Update Priorities & Visibility
-      reorderMutation.mutate(updates, {
-        onSuccess: () => {
-           // 4. Reset Admin's personal settings to ensure they see the global defaults
-           resetMutation.mutate(); 
-        }
-      });
+      reorderMutation.mutate(updates);
     } else {
       // User: Save Personal Preferences
       settingsMutation.mutate({ 
@@ -202,8 +239,8 @@ export const SettingsModal = ({ isOpen, onClose, uid, categories, initialPrimary
         borderColor: selectedPreset.border
       });
     } else {
-      // AdminならSYSTEM、それ以外はCUSTOM
-      const type = isAdmin ? 'SYSTEM' : 'CUSTOM';
+      // 主画面設定で作成する项目はすべてCUSTOMタイプ
+      const type = 'CUSTOM';
       // 新規作成時は最後尾に追加（現在の最大priority + 10）
       const maxPriority = categories.length > 0 ? Math.max(...categories.map(c => c.priority || 0)) : 0;
       
@@ -221,6 +258,11 @@ export const SettingsModal = ({ isOpen, onClose, uid, categories, initialPrimary
   };
 
   const handleEditClick = (cat: Category) => {
+    // Prevent editing SYSTEM categories - only admin in management screen can edit them
+    if (cat.type === 'SYSTEM') {
+      showToast('システムカテゴリは編集できません', 'error');
+      return;
+    }
     setEditCategory(cat);
     setNewLabel(cat.name);
     
@@ -230,6 +272,12 @@ export const SettingsModal = ({ isOpen, onClose, uid, categories, initialPrimary
   };
 
   const handleDeleteClick = (id: number) => {
+    // Prevent deleting SYSTEM categories - only admin in management screen can delete them
+    const cat = categories.find(c => c.id === id);
+    if (cat && cat.type === 'SYSTEM') {
+      showToast('システムカテゴリは削除できません', 'error');
+      return;
+    }
     if (window.confirm('このカテゴリを削除しますか？\n（過去の履歴データは保持されます）')) {
       deleteMutation.mutate(id);
     }
@@ -250,6 +298,23 @@ export const SettingsModal = ({ isOpen, onClose, uid, categories, initialPrimary
 
     setPrimary(newPrimary);
     setSecondary(newSecondary);
+    
+    // Auto-save preferences for non-admin users when visibility changes
+    if (!isAdmin) {
+      autoSaveMutation.mutate({ 
+        primaryButtons: newPrimary, 
+        secondaryButtons: newSecondary 
+      }, {
+        onSuccess: () => {
+          // Force refresh both queries
+          queryClient.invalidateQueries({ queryKey: ['categories', uid] });
+          queryClient.invalidateQueries({ queryKey: ['settings', uid] });
+        }
+      });
+    } else {
+      // For admin, just refresh categories
+      queryClient.invalidateQueries({ queryKey: ['categories', uid] });
+    }
   };
 
   const moveItem = (list: number[], index: number, direction: 'up' | 'down') => {
@@ -262,6 +327,31 @@ export const SettingsModal = ({ isOpen, onClose, uid, categories, initialPrimary
       [newList[index], newList[index + 1]] = [newList[index + 1], newList[index]];
     }
     return newList;
+  };
+
+  const handleReorder = (listType: 'primary' | 'secondary', newList: number[]) => {
+    if (listType === 'primary') {
+      setPrimary(newList);
+    } else {
+      setSecondary(newList);
+    }
+    
+    // Auto-save preferences for non-admin users when order changes
+    if (!isAdmin) {
+      autoSaveMutation.mutate({ 
+        primaryButtons: listType === 'primary' ? newList : primary, 
+        secondaryButtons: listType === 'secondary' ? newList : secondary 
+      }, {
+        onSuccess: () => {
+          // Force refresh both queries
+          queryClient.invalidateQueries({ queryKey: ['categories', uid] });
+          queryClient.invalidateQueries({ queryKey: ['settings', uid] });
+        }
+      });
+    } else {
+      // For admin, just refresh categories
+      queryClient.invalidateQueries({ queryKey: ['categories', uid] });
+    }
   };
 
   if (!isOpen) return null;
@@ -398,14 +488,14 @@ export const SettingsModal = ({ isOpen, onClose, uid, categories, initialPrimary
                                         </div>
                                         <div className="flex gap-1">
                                             <button 
-                                                onClick={() => setPrimary(moveItem(primary, index, 'up'))}
+                                                onClick={() => handleReorder('primary', moveItem(primary, index, 'up'))}
                                                 disabled={index === 0}
                                                 className="p-1 text-gray-500 hover:bg-gray-100 rounded disabled:opacity-30"
                                             >
                                                 <ArrowUp size={18} />
                                             </button>
                                             <button 
-                                                onClick={() => setPrimary(moveItem(primary, index, 'down'))}
+                                                onClick={() => handleReorder('primary', moveItem(primary, index, 'down'))}
                                                 disabled={index === primary.length - 1}
                                                 className="p-1 text-gray-500 hover:bg-gray-100 rounded disabled:opacity-30"
                                             >
@@ -435,14 +525,14 @@ export const SettingsModal = ({ isOpen, onClose, uid, categories, initialPrimary
                                         </div>
                                         <div className="flex gap-1">
                                             <button 
-                                                onClick={() => setSecondary(moveItem(secondary, index, 'up'))}
+                                                onClick={() => handleReorder('secondary', moveItem(secondary, index, 'up'))}
                                                 disabled={index === 0}
                                                 className="p-1 text-gray-500 hover:bg-gray-100 rounded disabled:opacity-30"
                                             >
                                                 <ArrowUp size={18} />
                                             </button>
                                             <button 
-                                                onClick={() => setSecondary(moveItem(secondary, index, 'down'))}
+                                                onClick={() => handleReorder('secondary', moveItem(secondary, index, 'down'))}
                                                 disabled={index === secondary.length - 1}
                                                 className="p-1 text-gray-500 hover:bg-gray-100 rounded disabled:opacity-30"
                                             >
@@ -570,7 +660,7 @@ export const SettingsModal = ({ isOpen, onClose, uid, categories, initialPrimary
                             {categories.map((cat) => {
                                 const isSystem = cat.type === 'SYSTEM';
                                 // Edit allowed if: (Admin) OR (Custom & User)
-                                const canEdit = isAdmin || (!isSystem);
+                                const canEdit = !isSystem; // ADMIN projects cannot be edited or deleted
                                 const { color: listColor } = getCategoryColor(cat);
 
                                 return (
@@ -578,7 +668,7 @@ export const SettingsModal = ({ isOpen, onClose, uid, categories, initialPrimary
                                         <div className="flex items-center gap-3">
                                             <div className={`w-3 h-3 rounded-full ${listColor.split(' ')[0]}`}></div>
                                             <span className="font-medium">{cat.name}</span>
-                                            {isSystem && <span className="text-xs bg-gray-200 text-gray-500 px-1 rounded">SYS</span>}
+                                            {isSystem && <span className="text-xs bg-gray-200 text-gray-500 px-1 rounded">ADMIN</span>}
                                         </div>
                                         <div className="flex gap-1 items-center">
                                             {canEdit ? (
@@ -613,28 +703,15 @@ export const SettingsModal = ({ isOpen, onClose, uid, categories, initialPrimary
             )}
         </div>
 
-        <div className="mt-6 flex justify-between gap-2 sticky bottom-0 bg-white pt-2 border-t shrink-0">
+        <div className="mt-6 flex justify-end gap-2 sticky bottom-0 bg-white pt-2 border-t shrink-0">
+            <button onClick={onClose} className="px-4 py-2 border rounded-lg hover:bg-gray-50">キャンセル</button>
             <button 
-                onClick={() => {
-                    if (window.confirm('現在の表示・並び順設定を破棄し、管理者の最新設定に戻しますか？')) {
-                        resetMutation.mutate();
-                    }
-                }}
-                className="px-4 py-2 text-red-500 border border-red-200 rounded-lg hover:bg-red-50 text-sm disabled:opacity-50"
-                disabled={resetMutation.isPending}
+                onClick={handleSaveSettings} 
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                disabled={settingsMutation.isPending || reorderMutation.isPending}
             >
-                管理者設定に戻す
+                {(settingsMutation.isPending || reorderMutation.isPending) ? '保存中...' : '設定を保存'}
             </button>
-            <div className="flex gap-2">
-                <button onClick={onClose} className="px-4 py-2 border rounded-lg hover:bg-gray-50">キャンセル</button>
-                <button 
-                    onClick={handleSaveSettings} 
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-                    disabled={settingsMutation.isPending}
-                >
-                    {settingsMutation.isPending ? '保存中...' : '設定を保存'}
-                </button>
-            </div>
         </div>
       </div>
     </div>

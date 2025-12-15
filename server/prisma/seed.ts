@@ -18,7 +18,10 @@ async function main() {
   // Admin User
   const admin = await prisma.user.upsert({
     where: { uid: 'admin' },
-    update: {},
+    update: {
+      role: 'ADMIN', // Ensure role is updated to ADMIN
+      name: 'Administrator', // Ensure name is correct
+    },
     create: {
       uid: 'admin',
       name: 'Administrator',
@@ -45,6 +48,48 @@ async function main() {
         priority: cat.priority,
       },
     });
+  }
+
+  // Fetch created categories to use their IDs
+  const categories = await prisma.category.findMany();
+  
+  // Create sample logs for today
+  console.log('Creating sample logs...');
+  const now = new Date();
+  const today9am = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 9, 0, 0);
+  
+  // Helper to find category
+  const getCat = (name: string) => categories.find(c => c.name === name);
+
+  const samples = [
+    { cat: 'メール/チャット', durationMin: 30 },
+    { cat: '会議',             durationMin: 60 },
+    { cat: '実装/検証',       durationMin: 120 },
+    { cat: '休憩',             durationMin: 60 },
+    { cat: '実装/検証',       durationMin: 90 },
+  ];
+
+  let currentTime = today9am;
+
+  for (const sample of samples) {
+    const cat = getCat(sample.cat);
+    if (cat) {
+      const endTime = new Date(currentTime.getTime() + sample.durationMin * 60 * 1000);
+      const duration = Math.floor((endTime.getTime() - currentTime.getTime()) / 1000);
+      
+      await prisma.workLog.create({
+        data: {
+          userId: admin.id,
+          categoryId: cat.id,
+          categoryNameSnapshot: cat.name,
+          startTime: currentTime,
+          endTime: endTime,
+          duration: duration,
+        },
+      });
+      
+      currentTime = endTime;
+    }
   }
   
   console.log('Seed data inserted');

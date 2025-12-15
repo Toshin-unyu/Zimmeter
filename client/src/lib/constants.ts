@@ -40,14 +40,14 @@ export const getCategoryColor = (category: Partial<Category>): { color: string, 
      const border = category.borderColor || 'border-transparent';
      // 黒系などの特別扱い（テキスト色）
      if (category.bgColor.includes('slate-800')) {
-         return { color: `${category.bgColor} text-white` };
+         return { color: `${category.bgColor} text-white ${border}` };
      }
      return { color: `${category.bgColor} ${border}` };
   }
 
   const name = category.name || '';
   if (name.includes('メール') || name.includes('チャット')) return { color: 'bg-blue-100 border-blue-300' };
-  if (name.includes('実装') || name.includes('検証'))       return { color: 'bg-slate-800 text-white' };
+  if (name.includes('実装') || name.includes('検証'))       return { color: 'bg-slate-800 text-white border-slate-800' };
   if (name.includes('会議'))       return { color: 'bg-orange-100 border-orange-300' };
   if (name.includes('資料'))       return { color: 'bg-green-100 border-green-300' };
   if (name.includes('商談') || name.includes('外出'))       return { color: 'bg-purple-100 border-purple-300' };

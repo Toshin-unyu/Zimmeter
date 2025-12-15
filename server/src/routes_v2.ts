@@ -157,14 +157,25 @@ router.get('/categories', async (req: Request, res: Response) => {
     const currentUser = getUser(req);
     
     // SYSTEMカテゴリ + 自分のCUSTOMカテゴリ
+    // 管理者のCUSTOMカテゴリは管理者のみが見れる
+    let whereCondition: any = {
+      OR: [
+        { type: 'SYSTEM' },
+        { type: 'CUSTOM', createdById: currentUser.id },
+      ],
+      isDeleted: false,
+    };
+
+    // 管理者の場合、他の管理者のCUSTOMカテゴリは見せない
+    if (currentUser.role === 'ADMIN') {
+      whereCondition.OR = [
+        { type: 'SYSTEM' },
+        { type: 'CUSTOM', createdById: currentUser.id },
+      ];
+    }
+
     const categories = await prisma.category.findMany({
-      where: {
-        OR: [
-          { type: 'SYSTEM' },
-          { type: 'CUSTOM', createdById: currentUser.id },
-        ],
-        isDeleted: false,
-      },
+      where: whereCondition,
       orderBy: { priority: 'asc' },
     });
     res.json(categories);
@@ -177,7 +188,7 @@ router.get('/categories', async (req: Request, res: Response) => {
 router.post('/categories', async (req: Request, res: Response) => {
   try {
     const currentUser = getUser(req);
-    const { name, type, priority } = req.body;
+    const { name, type, priority, defaultList, bgColor, borderColor } = req.body;
 
     // Admin以外がSYSTEMを作成しようとしたらエラー
     if (type === 'SYSTEM' && currentUser.role !== 'ADMIN') {
@@ -190,6 +201,9 @@ router.post('/categories', async (req: Request, res: Response) => {
         type: type || 'CUSTOM',
         createdById: currentUser.id, // SYSTEMでも作成者として残す
         priority: priority || 0,
+        defaultList: defaultList || 'SECONDARY', // デフォルトで副ボタンに設定
+        bgColor: bgColor || null,
+        borderColor: borderColor || null,
       },
     });
     res.json(category);
@@ -203,7 +217,7 @@ router.post('/categories', async (req: Request, res: Response) => {
 router.put('/categories/reorder', async (req: Request, res: Response) => {
   try {
     const currentUser = getUser(req);
-    const { orders } = req.body; // { id: number, priority: number }[]
+    const { orders } = req.body; // { id: number, priority: number, defaultList?: string }[]
 
     if (!Array.isArray(orders)) {
       return res.status(400).json({ error: 'Invalid data format' });
@@ -213,6 +227,10 @@ router.put('/categories/reorder', async (req: Request, res: Response) => {
     await prisma.$transaction(
       orders.map((item: any) => {
         const data: any = { priority: item.priority };
+        // Include defaultList if provided
+        if (item.defaultList) {
+          data.defaultList = item.defaultList;
+        }
         return prisma.category.update({
           where: { id: item.id },
           data,
@@ -232,7 +250,7 @@ router.put('/categories/:id', async (req: Request, res: Response) => {
   try {
     const currentUser = getUser(req);
     const { id } = req.params;
-    const { name, priority } = req.body;
+    const { name, priority, bgColor, borderColor, defaultList } = req.body;
 
     const category = await prisma.category.findUnique({ where: { id: Number(id) } });
     if (!category) return res.status(404).json({ error: 'Category not found' });
@@ -248,6 +266,9 @@ router.put('/categories/:id', async (req: Request, res: Response) => {
     const data: any = {};
     if (name !== undefined) data.name = name;
     if (priority !== undefined) data.priority = priority;
+    if (bgColor !== undefined) data.bgColor = bgColor;
+    if (borderColor !== undefined) data.borderColor = borderColor;
+    if (defaultList !== undefined) data.defaultList = defaultList;
 
     const updated = await prisma.category.update({
       where: { id: Number(id) },

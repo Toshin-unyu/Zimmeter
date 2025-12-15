@@ -96,7 +96,7 @@ function ZimmeterApp() {
 
   // 1. Fetch Categories
   const categoriesQuery = useQuery({
-    queryKey: ['categories'],
+    queryKey: ['categories', uid],
     queryFn: async () => {
       const res = await api.get<Category[]>('/categories');
       // Assign colors on frontend
@@ -163,33 +163,78 @@ function ZimmeterApp() {
     const allCats = categoriesQuery.data || [];
     const prefs = settingsQuery.data?.preferences || {};
     
-    let primaryIds = prefs.primaryButtons || [];
-    let secondaryIds = prefs.secondaryButtons || [];
+    // Create copies to avoid mutating original preferences
+    let primaryIds = [...(prefs.primaryButtons || [])];
+    let secondaryIds = [...(prefs.secondaryButtons || [])];
 
     const sorted = [...allCats].sort((a, b) => a.priority - b.priority);
 
-    // If no settings (or reset), use default logic (based on defaultList)
-    if (primaryIds.length === 0 && secondaryIds.length === 0) {
-       // defaultList='PRIMARY' -> Main
-       // defaultList='HIDDEN'  -> Hidden
-       // Otherwise -> Secondary
-       primaryIds = sorted.filter(c => c.defaultList === 'PRIMARY').map(c => c.id);
-       secondaryIds = sorted
-         .filter(c => c.defaultList !== 'PRIMARY' && c.defaultList !== 'HIDDEN')
-         .map(c => c.id);
+    console.log('[Debug] Merge Start. AllCats:', allCats.length, 'Primary:', primaryIds.length, 'Secondary:', secondaryIds.length);
+    console.log('[Debug] All Categories:', allCats.map(c => `${c.name}(${c.id})[${c.type}][${c.defaultList}]`));
+    console.log('[Debug] User Preferences:', prefs);
+
+    // Special logic for admin: Use their own preferences or system defaults for SYSTEM categories only
+    if (userStatus?.role === 'ADMIN') {
+      if (primaryIds.length === 0 && secondaryIds.length === 0) {
+        console.log('[Debug] Admin using system defaults for SYSTEM categories');
+        // Admin with no preferences: show SYSTEM categories with their defaultList settings
+        primaryIds = sorted.filter(c => c.type === 'SYSTEM' && c.defaultList === 'PRIMARY').map(c => c.id);
+        secondaryIds = sorted.filter(c => c.type === 'SYSTEM' && c.defaultList !== 'PRIMARY' && c.defaultList !== 'HIDDEN').map(c => c.id);
+      } else {
+        console.log('[Debug] Admin using personal preferences');
+        // Admin with preferences: use their preferences (which only include their own CUSTOM + SYSTEM categories)
+        // Also add any new SYSTEM categories that are not in preferences
+        const systemOrphanCats = sorted.filter(c => c.type === 'SYSTEM' && !primaryIds.includes(c.id) && !secondaryIds.includes(c.id));
+        
+        systemOrphanCats.forEach(c => {
+          if (c.defaultList === 'PRIMARY') {
+            primaryIds.push(c.id);
+          } else if (c.defaultList === 'SECONDARY') {
+            secondaryIds.push(c.id);
+          }
+        });
+      }
+    } else if (primaryIds.length === 0 && secondaryIds.length === 0) {
+       console.log('[Debug] User using system defaults');
+       // New user: show SYSTEM categories with their defaultList settings
+       primaryIds = sorted.filter(c => c.type === 'SYSTEM' && c.defaultList === 'PRIMARY').map(c => c.id);
+       secondaryIds = sorted.filter(c => c.type === 'SYSTEM' && c.defaultList !== 'PRIMARY' && c.defaultList !== 'HIDDEN').map(c => c.id);
+    } else {
+      console.log('[Debug] Merge Debug ---');
+      console.log('All Cats:', allCats.map(c => `${c.name}(${c.id})[${c.type}][${c.defaultList}]`));
+      // Merge logic: Find SYSTEM items that exist in allCats but are NOT in user preferences
+      const orphanCats = sorted.filter(c => c.type === 'SYSTEM' && !primaryIds.includes(c.id) && !secondaryIds.includes(c.id));
+      
+      console.log('[Debug] Orphan SYSTEM Cats:', orphanCats.map(c => c.name));
+
+      orphanCats.forEach(c => {
+        const shouldShow = c.defaultList === 'PRIMARY' || c.defaultList === 'SECONDARY';
+        
+        if (shouldShow) {
+          if (c.defaultList === 'PRIMARY') {
+            primaryIds.push(c.id);
+          } else {
+            secondaryIds.push(c.id);
+          }
+        } else {
+            console.log(`[Debug] Skipping ${c.name} (Hidden)`);
+        }
+      });
     }
 
-    return {
-        // ID順序を維持するために map を使用し、存在しないものは除外する
+    const result = {
         primaryButtons: primaryIds
             .map(id => allCats.find(c => c.id === id))
-            .filter((c) => !!c) as Category[],
+            .filter((c) => c !== undefined) as Category[],
             
         secondaryButtons: secondaryIds
             .map(id => allCats.find(c => c.id === id))
-            .filter((c) => !!c) as Category[],
+            .filter((c) => c !== undefined) as Category[],
     };
-  }, [categoriesQuery.data, settingsQuery.data]);
+    
+    console.log('[Debug] Final Result - Primary:', result.primaryButtons.map(c => c.name), 'Secondary:', result.secondaryButtons.map(c => c.name));
+    return result;
+  }, [categoriesQuery.data, settingsQuery.data, userStatus]);
 
   const switchMutation = useMutation({
     mutationFn: async (data: { categoryId: number }) => {
@@ -389,7 +434,12 @@ function ZimmeterApp() {
         {isSettingsOpen && (
             <SettingsModal
                 isOpen={isSettingsOpen}
-                onClose={() => setIsSettingsOpen(false)}
+                onClose={() => {
+                    setIsSettingsOpen(false);
+                    // Force refresh data to ensure new categories appear immediately
+                    queryClient.invalidateQueries({ queryKey: ['categories', uid] });
+                    queryClient.invalidateQueries({ queryKey: ['settings', uid] });
+                }}
                 uid={uid}
                 categories={categoriesQuery.data || []}
                 initialPrimary={primaryButtons.map(c => c.id)}
