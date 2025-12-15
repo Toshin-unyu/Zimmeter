@@ -121,6 +121,29 @@ router.put('/users/:id', async (req: Request, res: Response) => {
     const { id } = req.params;
     const { name, role, hourlyRate } = req.body;
 
+    // Check if trying to remove ADMIN role
+    if (role === 'USER') {
+      const userToUpdate = await prisma.user.findUnique({
+        where: { id: Number(id) },
+      });
+
+      if (userToUpdate?.role === 'ADMIN') {
+        const adminCount = await prisma.user.count({
+          where: {
+            role: 'ADMIN',
+            status: { not: 'DELETED' }
+          }
+        });
+
+        if (adminCount <= 1) {
+          return res.status(400).json({ 
+            error: 'Cannot remove last admin', 
+            message: 'システムには最低1人の管理者が必要です。' 
+          });
+        }
+      }
+    }
+
     const updatedUser = await prisma.user.update({
       where: { id: Number(id) },
       data: { name, role, hourlyRate },
@@ -141,6 +164,45 @@ router.patch('/users/:id/status', async (req: Request, res: Response) => {
 
     const { id } = req.params;
     const { status } = req.body; // Active, Disabled, Deleted
+
+    // Check if trying to disable/delete an ADMIN
+    if (status === 'DISABLED' || status === 'DELETED') {
+      const userToUpdate = await prisma.user.findUnique({
+        where: { id: Number(id) },
+      });
+
+      if (userToUpdate?.role === 'ADMIN') {
+        const adminCount = await prisma.user.count({
+          where: {
+            role: 'ADMIN',
+            status: { not: 'DELETED' } // Count active/disabled admins (though disabling last active is also bad, let's stick to active)
+            // Actually, if we disable, we should check for ACTIVE admins.
+            // If we delete, we check for not DELETED.
+            // But UserStatus is ACTIVE, DISABLED, DELETED.
+            // If I disable the last ACTIVE admin, that's bad too?
+            // The prompt says "if no other admin... page pops warning".
+            // Let's protect against reducing the count of usable admins.
+          }
+        });
+        
+        // Refined check: Count ACTIVE admins.
+        // If I am disabling/deleting, I shouldn't be the last ACTIVE admin.
+        const activeAdminCount = await prisma.user.count({
+            where: {
+                role: 'ADMIN',
+                status: 'ACTIVE'
+            }
+        });
+
+        // If this user is an ACTIVE admin, and count <= 1, prevent.
+        if (userToUpdate.status === 'ACTIVE' && activeAdminCount <= 1) {
+             return res.status(400).json({ 
+                error: 'Cannot disable/delete last active admin', 
+                message: 'システムには最低1人の有効な管理者が必要です。' 
+              });
+        }
+      }
+    }
 
     const updatedUser = await prisma.user.update({
       where: { id: Number(id) },

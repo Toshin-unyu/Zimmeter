@@ -35,6 +35,10 @@ export const UserList = () => {
       setEditingUser(null);
       showToast(`ユーザー ${variables.name} の情報を更新しました`, 'success');
     },
+    onError: (error: any) => {
+      const msg = error.response?.data?.message || error.response?.data?.error || 'ユーザー情報の更新に失敗しました';
+      showToast(msg, 'error');
+    },
   });
 
   const statusMutation = useMutation({
@@ -44,6 +48,10 @@ export const UserList = () => {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
       showToast(`ステータスを ${variables.status} に変更しました`, 'success');
+    },
+    onError: (error: any) => {
+      const msg = error.response?.data?.message || error.response?.data?.error || 'ステータスの変更に失敗しました';
+      showToast(msg, 'error');
     },
   });
 
