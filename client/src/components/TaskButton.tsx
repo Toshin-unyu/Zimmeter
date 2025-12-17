@@ -6,15 +6,17 @@ interface TaskButtonProps {
   category: Category;
   isActive: boolean;
   onClick: () => void;
+  onDoubleClick?: () => void;
   className?: string;
 }
 
-export const TaskButton = ({ category, isActive, onClick, className }: TaskButtonProps) => {
+export const TaskButton = ({ category, isActive, onClick, onDoubleClick, className }: TaskButtonProps) => {
   const { className: colorClass, style } = getCategoryStyle(category);
 
   return (
     <button
       onClick={onClick}
+      onDoubleClick={onDoubleClick}
       style={style}
       className={clsx(
         "flex flex-col items-center justify-center p-2 rounded-xl border-2 transition-all w-full h-24 shadow-sm hover:shadow-md cursor-pointer hover:brightness-95",

@@ -956,6 +956,185 @@ router.get('/export/csv', async (req: Request, res: Response) => {
   }
 });
 
+// GET /api/export/pdf
+// 当日の履歴をPDFでダウンロード（閲覧のみ権限）
+import PDFDocument from 'pdfkit';
+import fs from 'fs';
+
+router.get('/export/pdf', async (req: Request, res: Response) => {
+  try {
+    const currentUser = getUser(req);
+
+    // Get today's logs (same logic as /logs/history)
+    const now = new Date();
+    const jstTime = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+    jstTime.setUTCHours(0, 0, 0, 0);
+    const today = new Date(jstTime.getTime() - 9 * 60 * 60 * 1000);
+
+    const logs = await prisma.workLog.findMany({
+      where: {
+        userId: currentUser.id,
+        startTime: { gte: today },
+      },
+      orderBy: { startTime: 'asc' },
+      include: { category: true }
+    });
+
+    // Calculate durations and format logs
+    const formattedLogs = logs.map((log, index) => {
+      let endTime = log.endTime;
+      let duration = log.duration;
+
+      const nextLog = logs[index + 1];
+      if (nextLog) {
+        endTime = nextLog.startTime;
+        duration = Math.floor((new Date(endTime).getTime() - new Date(log.startTime).getTime()) / 1000);
+      } else if (endTime) {
+         duration = duration ?? Math.floor((new Date(endTime).getTime() - new Date(log.startTime).getTime()) / 1000);
+      }
+
+      return {
+        task: log.categoryNameSnapshot,
+        start: new Date(log.startTime).toLocaleTimeString('ja-JP', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit' }),
+        end: endTime ? new Date(endTime).toLocaleTimeString('ja-JP', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit' }) : '進行中',
+        duration: duration ? 
+          `${Math.floor(duration / 3600)}h ${Math.floor((duration % 3600) / 60)}m` : '-'
+      };
+    });
+
+    // Create PDF
+    const doc = new PDFDocument({
+      size: 'A4',
+      margin: 50,
+      userPassword: '', // No password to open
+      ownerPassword: Math.random().toString(36), // Random owner password to restrict permissions
+      permissions: {
+        printing: 'highResolution',
+        modifying: false,
+        copying: false,
+        annotating: false,
+        fillingForms: false,
+        contentAccessibility: true,
+        documentAssembly: false,
+      },
+      info: {
+        Title: '業務日報',
+        Author: 'Zimmeter',
+      }
+    });
+
+    // Font setup (IPA P Gothic)
+    // Check multiple paths (Host Ubuntu vs Container Alpine)
+    const fontPaths = [
+      '/usr/share/fonts/ipafont/ipagp.ttf',                 // Alpine (font-ipa) - Verified path
+      '/usr/share/fonts/opentype/ipafont-gothic/ipagp.ttf', // Ubuntu/Debian
+      '/usr/share/fonts/ipa/ipagp.ttf',                     // Alpine (older)
+      '/usr/share/fonts/TTF/ipagp.ttf'                      // Other Linux
+    ];
+
+    let fontLoaded = false;
+    for (const path of fontPaths) {
+      if (fs.existsSync(path)) {
+        doc.font(path);
+        fontLoaded = true;
+        break;
+      }
+    }
+
+    if (!fontLoaded) {
+      console.warn('Japanese font not found, falling back to default. Characters may not render correctly.');
+    }
+
+    // Response headers
+    const filename = `daily_report_${new Date().toISOString().split('T')[0]}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+    doc.pipe(res);
+
+    // Header
+    doc.fontSize(20).text('業務日報', { align: 'center' });
+    doc.moveDown();
+    
+    doc.fontSize(12).text(`氏名: ${currentUser.name || currentUser.uid}`);
+    doc.text(`日付: ${new Date().toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo' })}`);
+    doc.moveDown();
+
+    // Table Header
+    const tableTop = doc.y;
+    const colX = [50, 130, 300, 400]; // Start X positions for columns
+    
+    doc.fontSize(10);
+    doc.text('開始', colX[0], tableTop, { width: 70 });
+    doc.text('終了', colX[1], tableTop, { width: 70 });
+    doc.text('業務内容', colX[2], tableTop, { width: 150 }); // Swapped pos for better layout? No, let's just do sequential.
+    // Let's adjust columns: Start, End, Task, Duration
+    // Start: 50
+    // End: 110
+    // Task: 170
+    // Duration: 450
+    
+    const col = {
+        start: 50,
+        end: 110,
+        task: 170,
+        dur: 480
+    };
+
+    doc.text('開始', col.start, tableTop);
+    doc.text('終了', col.end, tableTop);
+    doc.text('業務内容', col.task, tableTop);
+    doc.text('時間', col.dur, tableTop);
+
+    doc.moveTo(50, tableTop + 15).lineTo(550, tableTop + 15).stroke();
+
+    let y = tableTop + 25;
+
+    // Rows
+    formattedLogs.forEach((log) => {
+        if (y > 750) { // New page if near bottom
+            doc.addPage();
+            y = 50;
+        }
+
+        doc.text(log.start, col.start, y);
+        doc.text(log.end, col.end, y);
+        doc.text(log.task, col.task, y, { width: 300 }); // Allow wrapping
+        doc.text(log.duration, col.dur, y);
+        
+        y += 20;
+    });
+
+    // Total Time
+    const totalSeconds = logs.reduce((acc, log, index) => {
+        let dur = log.duration || 0;
+        // recalculate if needed (same logic as above)
+        if (!log.endTime && logs[index+1]) {
+             dur = Math.floor((new Date(logs[index+1].startTime).getTime() - new Date(log.startTime).getTime()) / 1000);
+        } else if (log.endTime) {
+             dur = Math.floor((new Date(log.endTime).getTime() - new Date(log.startTime).getTime()) / 1000);
+        }
+        return acc + dur;
+    }, 0);
+
+    const totalH = Math.floor(totalSeconds / 3600);
+    const totalM = Math.floor((totalSeconds % 3600) / 60);
+
+    doc.moveDown();
+    doc.moveTo(50, y).lineTo(550, y).stroke();
+    y += 10;
+    doc.fontSize(12).text(`合計作業時間: ${totalH}時間 ${totalM}分`, col.task, y);
+
+    doc.end();
+
+  } catch (error) {
+    console.error(error);
+    if (!res.headersSent) {
+        res.status(500).json({ error: 'Failed to export PDF' });
+    }
+  }
+});
+
 
 // --- Settings Operations ---
 

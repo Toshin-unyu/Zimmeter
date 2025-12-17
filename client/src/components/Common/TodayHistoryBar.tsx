@@ -19,9 +19,10 @@ interface WorkLog {
 interface TodayHistoryBarProps {
   logs: WorkLog[];
   mergedCategories: Record<number, Category>;
+  onItemDoubleClick?: (categoryId: number) => void;
 }
 
-export const TodayHistoryBar = ({ logs, mergedCategories }: TodayHistoryBarProps) => {
+export const TodayHistoryBar = ({ logs, mergedCategories, onItemDoubleClick }: TodayHistoryBarProps) => {
   const formatDuration = (seconds: number) => {
     const h = Math.floor(seconds / 3600);
     const m = Math.floor((seconds % 3600) / 60);

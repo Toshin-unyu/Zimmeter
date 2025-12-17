@@ -17,9 +17,10 @@ interface EditLogModalProps {
   log: WorkLog | null;
   categories: Category[];
   uid?: string;
+  initialCategoryId?: number | null;
 }
 
-export const EditLogModal = ({ isOpen, onClose, mode, log, categories, uid }: EditLogModalProps) => {
+export const EditLogModal = ({ isOpen, onClose, mode, log, categories, uid, initialCategoryId }: EditLogModalProps) => {
   const queryClient = useQueryClient();
   const { showToast } = useToast();
   const [selectedCatId, setSelectedCatId] = useState<number | null>(null);
@@ -34,7 +35,7 @@ export const EditLogModal = ({ isOpen, onClose, mode, log, categories, uid }: Ed
     }
 
     if (mode === 'create') {
-      setSelectedCatId(null);
+      setSelectedCatId(initialCategoryId || null);
       const now = new Date();
       const pad = (n: number) => String(n).padStart(2, '0');
       const hh = pad(now.getHours());

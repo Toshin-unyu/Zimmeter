@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { QueryClient, QueryClientProvider, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Settings, Download, History, AlertCircle, Pencil, Square } from 'lucide-react';
+import { Settings, Download, History, AlertCircle, Pencil, Square, LogOut } from 'lucide-react';
 import { getCategoryColor } from './lib/constants';
 import type { Category } from './lib/constants';
 import { api } from './lib/axios';
@@ -52,6 +52,9 @@ function ZimmeterApp() {
   const [activeTab, setActiveTab] = useState<'main' | 'admin'>('main');
   const [editingLog, setEditingLog] = useState<WorkLog | null>(null);
   const [isAddingLog, setIsAddingLog] = useState(false);
+  const [initialAddCategoryId, setInitialAddCategoryId] = useState<number | null>(null);
+  const [hasLeftWork, setHasLeftWork] = useState(false);
+  const [historyFilterCategoryId, setHistoryFilterCategoryId] = useState<number | null>(null);
 
   const { data: userStatus } = useUserStatus(!!uid);
   const { showToast } = useToast();
@@ -78,7 +81,7 @@ function ZimmeterApp() {
     prevUserRef.current = userStatus;
   }, [userStatus, showToast]);
 
-  // Initialize UID
+  // Initialize UID and Left Work State
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const pUid = params.get('uid');
@@ -89,6 +92,13 @@ function ZimmeterApp() {
       const stored = localStorage.getItem('zimmeter_uid');
       if (stored) setUid(stored);
       else setShowLoginModal(true);
+    }
+
+    // Check if user has left work today
+    const lastLeftDate = localStorage.getItem('zimmeter_last_left_date');
+    const today = new Date().toLocaleDateString();
+    if (lastLeftDate === today) {
+        setHasLeftWork(true);
     }
   }, []);
 
@@ -253,9 +263,37 @@ function ZimmeterApp() {
     switchMutation.mutate({ categoryId: catId });
   };
 
+  const handleTaskDoubleClick = (catId: number) => {
+    setInitialAddCategoryId(catId);
+    setIsAddingLog(true);
+  };
+
+  const handleHistoryDoubleClick = (catId: number) => {
+    setHistoryFilterCategoryId(catId);
+    setShowHistory(true);
+  };
+
   const handleTaskStop = () => {
     setShowIdleAlert(false);
     stopMutation.mutate();
+  };
+
+  const handleLeaveWork = () => {
+    if (window.confirm('退社を確定しますか?')) {
+        // Stop current task if running
+        if (activeLogQuery.data) {
+            handleTaskStop();
+        }
+        
+        // Set state
+        setHasLeftWork(true);
+        
+        // Persist to localStorage
+        const today = new Date().toLocaleDateString();
+        localStorage.setItem('zimmeter_last_left_date', today);
+        
+        showToast('退社しました。お疲れ様でした。', 'success');
+    }
   };
 
   const { formattedTime } = useTimer(activeLogQuery.data?.startTime ?? null);
@@ -305,18 +343,17 @@ function ZimmeterApp() {
             <div className="flex gap-1 lg:gap-2 shrink-0">
                 <button 
                     onClick={() => setShowHistory(!showHistory)}
-
                     className={`p-2 rounded-lg hover:bg-gray-100 transition-colors ${showHistory ? 'bg-blue-50 text-blue-600' : 'text-gray-500'}`}
                     title="履歴"
                 >
                     <History size={20} />
                 </button>
                 <a 
-                    href={`${api.defaults.baseURL}/export/csv`} 
+                    href={`${api.defaults.baseURL}/export/pdf?uid=${uid}`} 
                     target="_blank" 
                     rel="noopener noreferrer"
                     className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors"
-                    title="CSVエクスポート"
+                    title="PDFエクスポート"
                 >
                     <Download size={20} />
                 </a>
@@ -326,6 +363,15 @@ function ZimmeterApp() {
                     title="設定"
                 >
                     <Settings size={20} />
+                </button>
+                
+                <button 
+                    onClick={handleLeaveWork}
+                    className="flex items-center gap-2 px-3 lg:px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg transition-all shadow-md hover:shadow-lg font-bold ml-2"
+                    title="退社する"
+                >
+                    <LogOut size={18} />
+                    <span className="hidden sm:inline">退社</span>
                 </button>
             </div>
         </header>
@@ -385,6 +431,7 @@ function ZimmeterApp() {
                                     category={cat}
                                     isActive={activeLogQuery.data?.categoryId === cat.id}
                                     onClick={() => handleTaskSwitch(cat.id)}
+                                    onDoubleClick={() => handleTaskDoubleClick(cat.id)}
                                 />
                             ))}
                         </div>
@@ -401,6 +448,7 @@ function ZimmeterApp() {
                                         category={cat}
                                         isActive={activeLogQuery.data?.categoryId === cat.id}
                                         onClick={() => handleTaskSwitch(cat.id)}
+                                        onDoubleClick={() => handleTaskDoubleClick(cat.id)}
                                         className="h-16 text-sm"
                                     />
                                 ))}
@@ -415,6 +463,7 @@ function ZimmeterApp() {
                     <TodayHistoryBar
                       logs={historyQuery.data || []}
                       mergedCategories={categoriesQuery.data?.reduce((acc, c) => ({...acc, [c.id]: c}), {}) || {}}
+                      onItemDoubleClick={handleHistoryDoubleClick}
                     />
                 </>
             )}
@@ -422,11 +471,17 @@ function ZimmeterApp() {
 
         <HistoryModal
             isOpen={showHistory}
-            onClose={() => setShowHistory(false)}
+            onClose={() => {
+                setShowHistory(false);
+                setHistoryFilterCategoryId(null);
+            }}
             logs={historyQuery.data || []}
             onEdit={(log) => setEditingLog(log)}
             onAdd={() => setIsAddingLog(true)}
             mergedCategories={categoriesQuery.data?.reduce((acc, c) => ({...acc, [c.id]: c}), {}) || {}}
+            filterCategoryId={historyFilterCategoryId}
+            onClearFilter={() => setHistoryFilterCategoryId(null)}
+            onItemDoubleClick={handleHistoryDoubleClick}
         />
 
         <EditLogModal
@@ -440,11 +495,15 @@ function ZimmeterApp() {
 
         <EditLogModal
             isOpen={isAddingLog}
-            onClose={() => setIsAddingLog(false)}
+            onClose={() => {
+                setIsAddingLog(false);
+                setInitialAddCategoryId(null);
+            }}
             mode="create"
             log={null}
             categories={categoriesQuery.data || []}
             uid={uid}
+            initialCategoryId={initialAddCategoryId}
         />
 
         {isSettingsOpen && (
@@ -482,6 +541,25 @@ function ZimmeterApp() {
                     >
                         閉じる
                     </button>
+                </div>
+            </div>
+        )}
+
+        {/* Leave Work Overlay */}
+        {hasLeftWork && (
+            <div className="fixed inset-0 bg-green-50/95 z-[100] flex flex-col items-center justify-center backdrop-blur-sm">
+                <div className="bg-white p-10 rounded-3xl shadow-xl flex flex-col items-center border-4 border-green-100 max-w-lg mx-4">
+                    <div className="bg-green-100 p-6 rounded-full mb-6 text-green-600 animate-pulse">
+                        <LogOut size={48} />
+                    </div>
+                    <h2 className="text-3xl font-bold text-gray-800 mb-2">本日の業務は終了しました</h2>
+                    <p className="text-gray-500 text-lg mb-8 text-center">
+                        退社処理が完了しました。<br/>
+                        今日も一日お疲れ様でした。
+                    </p>
+                    <div className="text-sm text-gray-400">
+                        ※明日になると自動的にリセットされます
+                    </div>
                 </div>
             </div>
         )}

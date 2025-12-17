@@ -9,6 +9,7 @@ declare global {
       user?: {
         id: number;
         uid: string;
+        name: string;
         role: string;
         status: UserStatus;
       };
@@ -66,6 +67,7 @@ export const statusGuard = async (req: Request, res: Response, next: NextFunctio
     req.user = {
       id: user.id,
       uid: user.uid,
+      name: user.name,
       role: user.role,
       status: user.status,
     };
@@ -84,6 +86,7 @@ export const statusGuard = async (req: Request, res: Response, next: NextFunctio
             req.user = {
               id: existing.id,
               uid: existing.uid,
+              name: existing.name,
               role: existing.role,
               status: existing.status,
             };

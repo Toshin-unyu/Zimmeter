@@ -23,9 +23,22 @@ interface HistoryModalProps {
   onEdit: (log: WorkLog) => void;
   onAdd: () => void;
   mergedCategories: Record<number, Category>;
+  filterCategoryId: number | null;
+  onClearFilter: () => void;
+  onItemDoubleClick?: (categoryId: number) => void;
 }
 
-export const HistoryModal = ({ isOpen, onClose, logs, onEdit, onAdd, mergedCategories }: HistoryModalProps) => {
+export const HistoryModal = ({ 
+    isOpen, 
+    onClose, 
+    logs, 
+    onEdit, 
+    onAdd, 
+    mergedCategories, 
+    filterCategoryId, 
+    onClearFilter, 
+    onItemDoubleClick 
+}: HistoryModalProps) => {
   if (!isOpen) return null;
 
   const formatDuration = (seconds: number) => {
@@ -66,17 +79,35 @@ export const HistoryModal = ({ isOpen, onClose, logs, onEdit, onAdd, mergedCateg
     };
   };
 
-  const todayLogs = logs.filter(log => {
+    const todayLogs = logs.filter(log => {
     const logDate = new Date(log.startTime).toDateString();
     const today = new Date().toDateString();
-    return logDate === today;
+    const isSameDay = logDate === today;
+    const matchesFilter = filterCategoryId ? log.categoryId === filterCategoryId : true;
+    return isSameDay && matchesFilter;
   });
+
+  const filterCategory = filterCategoryId ? mergedCategories[filterCategoryId] : null;
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-xl">
         <div className="flex justify-between items-center mb-4 shrink-0">
-          <h2 className="text-xl font-bold text-gray-700">本日の履歴</h2>
+          <div className="flex items-center gap-4">
+              <h2 className="text-xl font-bold text-gray-700">本日の履歴</h2>
+              {filterCategory && (
+                  <div className="flex items-center gap-2 bg-blue-50 px-3 py-1 rounded-full text-sm text-blue-700 border border-blue-100 animate-fadeIn">
+                      <span className="font-bold">フィルタ: {filterCategory.name}</span>
+                      <button 
+                        onClick={onClearFilter} 
+                        className="p-0.5 hover:bg-blue-100 rounded-full transition-colors"
+                        title="フィルタを解除"
+                      >
+                          <X size={14}/>
+                      </button>
+                  </div>
+              )}
+          </div>
           <div className="flex items-center gap-2">
             <button
               onClick={onAdd}
@@ -110,7 +141,11 @@ export const HistoryModal = ({ isOpen, onClose, logs, onEdit, onAdd, mergedCateg
                  const { className: colorClass, style } = getCategoryStyle(cat);
                  
                  return (
-                    <tr key={log.id} className="border-b last:border-0 hover:bg-gray-50">
+                    <tr 
+                        key={log.id} 
+                        className="border-b last:border-0 hover:bg-gray-50 cursor-pointer transition-colors"
+                        onDoubleClick={() => onItemDoubleClick?.(log.categoryId)}
+                    >
                       <td className="p-2 font-mono text-gray-500 text-center">
                         {new Date(log.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                       </td>
