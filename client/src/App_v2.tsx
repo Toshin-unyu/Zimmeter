@@ -177,27 +177,11 @@ function ZimmeterApp() {
     console.log('[Debug] All Categories:', allCats.map(c => `${c.name}(${c.id})[${c.type}][${c.defaultList}]`));
     console.log('[Debug] User Preferences:', prefs);
 
-    // Special logic for admin: Use their own preferences or system defaults for SYSTEM categories only
+    // Special logic for admin: ALWAYS use system defaults to match new user experience
     if (userStatus?.role === 'ADMIN') {
-      if (primaryIds.length === 0 && secondaryIds.length === 0) {
-        console.log('[Debug] Admin using system defaults for SYSTEM categories');
-        // Admin with no preferences: show SYSTEM categories with their defaultList settings
+        console.log('[Debug] Admin using system defaults (Forced)');
         primaryIds = sorted.filter(c => c.type === 'SYSTEM' && c.defaultList === 'PRIMARY').map(c => c.id);
         secondaryIds = sorted.filter(c => c.type === 'SYSTEM' && c.defaultList !== 'PRIMARY' && c.defaultList !== 'HIDDEN').map(c => c.id);
-      } else {
-        console.log('[Debug] Admin using personal preferences');
-        // Admin with preferences: use their preferences (which only include their own CUSTOM + SYSTEM categories)
-        // Also add any new SYSTEM categories that are not in preferences
-        const systemOrphanCats = sorted.filter(c => c.type === 'SYSTEM' && !primaryIds.includes(c.id) && !secondaryIds.includes(c.id));
-        
-        systemOrphanCats.forEach(c => {
-          if (c.defaultList === 'PRIMARY') {
-            primaryIds.push(c.id);
-          } else if (c.defaultList === 'SECONDARY') {
-            secondaryIds.push(c.id);
-          }
-        });
-      }
     } else if (primaryIds.length === 0 && secondaryIds.length === 0) {
        console.log('[Debug] User using system defaults');
        // New user: show SYSTEM categories with their defaultList settings

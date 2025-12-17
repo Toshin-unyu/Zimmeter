@@ -50,20 +50,6 @@ export const SettingsModal = ({ isOpen, onClose, uid, categories, initialPrimary
     }
   });
 
-  // 1.5. Auto-save Preferences (without closing modal)
-  const autoSaveMutation = useMutation({
-    mutationFn: async (data: { primaryButtons: number[]; secondaryButtons: number[] }) => {
-      return api.post('/settings', { preferences: data });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['settings', uid] });
-    },
-    onError: (error: any) => {
-      const msg = error.response?.data?.details || '設定の保存に失敗しました';
-      showToast(msg, 'error');
-    }
-  });
-
   // 2. Create Category
   const createMutation = useMutation({
     mutationFn: async (data: { 
@@ -89,21 +75,8 @@ export const SettingsModal = ({ isOpen, onClose, uid, categories, initialPrimary
       setSelectedPreset(COLOR_PRESETS[0]);
       showToast('カテゴリを作成しました', 'success');
       
-      // Auto-save preferences for all users
-      const updatedPrimary = targetList === 'primary' ? [...primary, newId] : primary;
-      const updatedSecondary = targetList === 'secondary' ? [...secondary, newId] : secondary;
-      
-      // Save immediately and then refresh categories to ensure main screen updates
-      autoSaveMutation.mutate({ 
-        primaryButtons: updatedPrimary, 
-        secondaryButtons: updatedSecondary 
-      }, {
-        onSuccess: () => {
-          // Force refresh both queries to ensure main screen sees the new category
-          queryClient.invalidateQueries({ queryKey: ['categories', uid] });
-          queryClient.invalidateQueries({ queryKey: ['settings', uid] });
-        }
-      });
+      // Auto-save is disabled to prevent accidental changes
+      // User must click "Save" to persist the layout changes
     },
     onError: (error: any) => {
         const msg = error.response?.data?.details || error.response?.data?.error || 'カテゴリの作成に失敗しました';
@@ -148,31 +121,64 @@ export const SettingsModal = ({ isOpen, onClose, uid, categories, initialPrimary
       setSecondary(newSecondary);
       showToast('カテゴリを削除しました', 'success');
       
-      // Auto-save preferences for all users
-      autoSaveMutation.mutate({ 
-        primaryButtons: newPrimary, 
-        secondaryButtons: newSecondary 
-      }, {
-        onSuccess: () => {
-          // Force refresh both queries
-          queryClient.invalidateQueries({ queryKey: ['categories', uid] });
-          queryClient.invalidateQueries({ queryKey: ['settings', uid] });
-        }
-      });
+      // Auto-save is disabled
     },
     onError: () => {
         showToast('カテゴリの削除に失敗しました', 'error');
     }
   });
 
+  // 5. Reorder Categories
+  const reorderMutation = useMutation({
+    mutationFn: async (orders: { id: number; priority: number; defaultList?: string }[]) => {
+      return api.put('/categories/reorder', { orders });
+    },
+    onSuccess: () => {
+      // Force refresh both queries for admin
+      queryClient.invalidateQueries({ queryKey: ['categories', uid] });
+      queryClient.invalidateQueries({ queryKey: ['settings', uid] });
+      showToast('設定を保存しました', 'success');
+      onClose();
+    },
+    onError: () => {
+      showToast('順序の更新に失敗しました', 'error');
+    }
+  });
+
   // --- Handlers ---
 
   const handleSaveSettings = () => {
-    // All Users (including Admin): Save Personal Preferences
-    settingsMutation.mutate({ 
-      primaryButtons: primary, 
-      secondaryButtons: secondary
-    });
+    if (isAdmin) {
+      // Admin: Update Global Priorities (Category.priority)
+      // 1. Gather all IDs in order: Primary -> Secondary -> Hidden
+      const hiddenIds = categories
+        .filter(c => !primary.includes(c.id) && !secondary.includes(c.id))
+        .map(c => c.id);
+
+      const allOrderedIds = [...primary, ...secondary, ...hiddenIds];
+
+      // 2. Create update payload
+      const updates = allOrderedIds.map((id, index) => {
+        let defaultList = 'HIDDEN';
+        if (primary.includes(id)) defaultList = 'PRIMARY';
+        else if (secondary.includes(id)) defaultList = 'SECONDARY';
+        
+        return {
+            id,
+            priority: index * 10,
+            defaultList
+        };
+      });
+
+      // 3. Update Priorities & Visibility
+      reorderMutation.mutate(updates);
+    } else {
+      // User: Save Personal Preferences
+      settingsMutation.mutate({ 
+        primaryButtons: primary, 
+        secondaryButtons: secondary
+      });
+    }
   };
 
   const handleCreateOrUpdate = () => {
@@ -186,8 +192,8 @@ export const SettingsModal = ({ isOpen, onClose, uid, categories, initialPrimary
         borderColor: selectedPreset.border
       });
     } else {
-      // 主画面設定で作成する项目はすべてCUSTOMタイプ
-      const type = 'CUSTOM';
+      // 主画面設定で作成する项目は、AdminならSYSTEM、それ以外ならCUSTOM
+      const type = isAdmin ? 'SYSTEM' : 'CUSTOM';
       // 新規作成時は最後尾に追加（現在の最大priority + 10）
       const maxPriority = categories.length > 0 ? Math.max(...categories.map(c => c.priority || 0)) : 0;
       
@@ -246,17 +252,7 @@ export const SettingsModal = ({ isOpen, onClose, uid, categories, initialPrimary
     setPrimary(newPrimary);
     setSecondary(newSecondary);
     
-    // Auto-save preferences for all users when visibility changes
-    autoSaveMutation.mutate({ 
-      primaryButtons: newPrimary, 
-      secondaryButtons: newSecondary 
-    }, {
-      onSuccess: () => {
-        // Force refresh both queries
-        queryClient.invalidateQueries({ queryKey: ['categories', uid] });
-        queryClient.invalidateQueries({ queryKey: ['settings', uid] });
-      }
-    });
+    // Auto-save removed
   };
 
   const moveItem = (list: number[], index: number, direction: 'up' | 'down') => {
@@ -278,17 +274,7 @@ export const SettingsModal = ({ isOpen, onClose, uid, categories, initialPrimary
       setSecondary(newList);
     }
     
-    // Auto-save preferences for all users when order changes
-    autoSaveMutation.mutate({ 
-      primaryButtons: listType === 'primary' ? newList : primary, 
-      secondaryButtons: listType === 'secondary' ? newList : secondary 
-    }, {
-      onSuccess: () => {
-        // Force refresh both queries
-        queryClient.invalidateQueries({ queryKey: ['categories', uid] });
-        queryClient.invalidateQueries({ queryKey: ['settings', uid] });
-      }
-    });
+    // Auto-save removed
   };
 
   if (!isOpen) return null;
@@ -597,7 +583,7 @@ export const SettingsModal = ({ isOpen, onClose, uid, categories, initialPrimary
                             {categories.map((cat) => {
                                 const isSystem = cat.type === 'SYSTEM';
                                 // Edit allowed if: (Admin) OR (Custom & User)
-                                const canEdit = !isSystem; // ADMIN projects cannot be edited or deleted
+                                const canEdit = !isSystem; 
                                 const { color: listColor } = getCategoryColor(cat);
 
                                 return (
@@ -645,9 +631,9 @@ export const SettingsModal = ({ isOpen, onClose, uid, categories, initialPrimary
             <button 
                 onClick={handleSaveSettings} 
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-                disabled={settingsMutation.isPending}
+                disabled={settingsMutation.isPending || reorderMutation.isPending}
             >
-                {settingsMutation.isPending ? '保存中...' : '設定を保存'}
+                {settingsMutation.isPending || reorderMutation.isPending ? '保存中...' : '設定を保存'}
             </button>
         </div>
       </div>
