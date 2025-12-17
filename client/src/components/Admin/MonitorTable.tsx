@@ -175,15 +175,20 @@ export const MonitorTable = ({ selectedUsers = [], timeRange = 'daily', customSt
       const tableRows: any[] = [];
 
       logs.forEach(log => {
-        // Determine Daily Status
-        const logDate = new Date(log.startTime);
-        const dateKey = logDate.toLocaleDateString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit' }).replaceAll('/', '-');
+        // Determine Daily Status (Strict JST)
+        const dateObj = new Date(log.startTime);
+        const jstDate = new Date(dateObj.toLocaleString("en-US", { timeZone: "Asia/Tokyo" }));
+        const y = jstDate.getFullYear();
+        const m = String(jstDate.getMonth() + 1).padStart(2, '0');
+        const d = String(jstDate.getDate()).padStart(2, '0');
+        const dateKey = `${y}-${m}-${d}`;
+        
         const status = dailyStatuses?.find(s => s.userId === log.userId && s.date === dateKey);
         
         let statusStr = '-';
         if (status) {
-            const dateShort = `${logDate.getMonth() + 1}.${logDate.getDate()}`;
-            if (status.isFixed) statusStr = `${dateShort} 補正済`;
+            const dateShort = `${Number(m)}.${Number(d)}`;
+            if (status.isFixed) statusStr = `${dateShort} 未退社(補正済)`;
             else if (status.hasLeft) statusStr = `${dateShort} 退社済`;
             else statusStr = `${dateShort} 未退社`;
         }
@@ -326,7 +331,7 @@ export const MonitorTable = ({ selectedUsers = [], timeRange = 'daily', customSt
                 if (status) {
                     const dateShort = `${logDate.getMonth() + 1}.${logDate.getDate()}`;
                     if (status.isFixed) {
-                        statusText = `${dateShort} 補正済`;
+                        statusText = `${dateShort} 未退社(補正済)`;
                         statusColor = 'text-blue-600 font-medium';
                     } else if (status.hasLeft) {
                         statusText = `${dateShort} 退社済`;
