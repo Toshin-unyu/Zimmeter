@@ -9,6 +9,7 @@ import { SettingsModal } from './components/SettingsModal';
 import { HistoryModal } from './components/HistoryModal';
 import { EditLogModal } from './components/EditLogModal';
 import { LoginModal } from './components/LoginModal';
+import { CheckStatusModal } from './components/CheckStatusModal';
 import { StatusGuard } from './components/Common/StatusGuard';
 import { TimeDecoration } from './components/Common/TimeDecoration';
 import { TodayHistoryBar } from './components/Common/TodayHistoryBar';
@@ -40,6 +41,14 @@ interface UserSettings {
     primaryButtons?: number[]; // IDs
     secondaryButtons?: number[];
   };
+}
+
+interface DailyStatusCheck {
+    date: string;
+    hasLeft: boolean;
+    hasUnstoppedTasks: boolean;
+    needsFix: boolean;
+    isFixed: boolean;
 }
 
 function ZimmeterApp() {
@@ -94,7 +103,8 @@ function ZimmeterApp() {
       else setShowLoginModal(true);
     }
 
-    // Check if user has left work today
+    // Check if user has left work today (Local check for UI immediate feedback)
+    // Real status is checked via API below
     const lastLeftDate = localStorage.getItem('zimmeter_last_left_date');
     const today = new Date().toLocaleDateString();
     if (lastLeftDate === today) {
@@ -142,9 +152,12 @@ function ZimmeterApp() {
         setShowIdleAlert(false);
         return;
     }
-    const timer = setTimeout(() => setShowIdleAlert(true), 30000);
-    return () => clearTimeout(timer);
-  }, [activeLogQuery.data, activeLogQuery.isLoading]);
+    // Only show idle alert if NOT left work
+    if (!hasLeftWork) {
+        const timer = setTimeout(() => setShowIdleAlert(true), 30000);
+        return () => clearTimeout(timer);
+    }
+  }, [activeLogQuery.data, activeLogQuery.isLoading, hasLeftWork]);
 
   // 3. Fetch Settings
   const settingsQuery = useQuery({
@@ -172,6 +185,20 @@ function ZimmeterApp() {
       refetchInterval: 3000, // 每3秒更新一次
   });
 
+  // 5. Check Daily Status (Yesterday's check)
+  const checkStatusQuery = useQuery({
+      queryKey: ['statusCheck', uid],
+      queryFn: async () => {
+          if (!uid) return null;
+          try {
+             const res = await api.get<DailyStatusCheck>('/status/check');
+             return res.data;
+          } catch { return null; }
+      },
+      enabled: !!uid && activeTab === 'main',
+      staleTime: 1000 * 60 * 60, // Check once per session usually, or infrequent
+  });
+
   // Merge Categories & Settings
   const { primaryButtons, secondaryButtons } = useMemo(() => {
     const allCats = categoriesQuery.data || [];
@@ -183,28 +210,18 @@ function ZimmeterApp() {
 
     const sorted = [...allCats].sort((a, b) => a.priority - b.priority);
 
-    console.log('[Debug] Merge Start. AllCats:', allCats.length, 'Primary:', primaryIds.length, 'Secondary:', secondaryIds.length);
-    console.log('[Debug] All Categories:', allCats.map(c => `${c.name}(${c.id})[${c.type}][${c.defaultList}]`));
-    console.log('[Debug] User Preferences:', prefs);
-
     // Special logic for admin: ALWAYS use system defaults to match new user experience
     if (userStatus?.role === 'ADMIN') {
-        console.log('[Debug] Admin using system defaults (Forced)');
         primaryIds = sorted.filter(c => c.type === 'SYSTEM' && c.defaultList === 'PRIMARY').map(c => c.id);
         secondaryIds = sorted.filter(c => c.type === 'SYSTEM' && c.defaultList !== 'PRIMARY' && c.defaultList !== 'HIDDEN').map(c => c.id);
     } else if (primaryIds.length === 0 && secondaryIds.length === 0) {
-       console.log('[Debug] User using system defaults');
        // New user: show SYSTEM categories with their defaultList settings
        primaryIds = sorted.filter(c => c.type === 'SYSTEM' && c.defaultList === 'PRIMARY').map(c => c.id);
        secondaryIds = sorted.filter(c => c.type === 'SYSTEM' && c.defaultList !== 'PRIMARY' && c.defaultList !== 'HIDDEN').map(c => c.id);
     } else {
-      console.log('[Debug] Merge Debug ---');
-      console.log('All Cats:', allCats.map(c => `${c.name}(${c.id})[${c.type}][${c.defaultList}]`));
       // Merge logic: Find SYSTEM items that exist in allCats but are NOT in user preferences
       const orphanCats = sorted.filter(c => c.type === 'SYSTEM' && !primaryIds.includes(c.id) && !secondaryIds.includes(c.id));
       
-      console.log('[Debug] Orphan SYSTEM Cats:', orphanCats.map(c => c.name));
-
       orphanCats.forEach(c => {
         const shouldShow = c.defaultList === 'PRIMARY' || c.defaultList === 'SECONDARY';
         
@@ -214,8 +231,6 @@ function ZimmeterApp() {
           } else {
             secondaryIds.push(c.id);
           }
-        } else {
-            console.log(`[Debug] Skipping ${c.name} (Hidden)`);
         }
       });
     }
@@ -230,7 +245,6 @@ function ZimmeterApp() {
             .filter((c) => c !== undefined) as Category[],
     };
     
-    console.log('[Debug] Final Result - Primary:', result.primaryButtons.map(c => c.name), 'Secondary:', result.secondaryButtons.map(c => c.name));
     return result;
   }, [categoriesQuery.data, settingsQuery.data, userStatus]);
 
@@ -252,6 +266,17 @@ function ZimmeterApp() {
       queryClient.invalidateQueries({ queryKey: ['activeLog', uid] });
       queryClient.invalidateQueries({ queryKey: ['history', uid] });
     },
+  });
+
+  const leaveWorkMutation = useMutation({
+      mutationFn: async () => {
+          return api.post('/status/leave', {});
+      },
+      onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: ['activeLog', uid] });
+          queryClient.invalidateQueries({ queryKey: ['history', uid] });
+          queryClient.invalidateQueries({ queryKey: ['statusCheck', uid] });
+      }
   });
 
   const handleTaskSwitch = (catId: number) => {
@@ -286,19 +311,23 @@ function ZimmeterApp() {
 
   const handleLeaveWork = () => {
     if (window.confirm('退社を確定しますか?')) {
-        // Stop current task if running
-        if (activeLogQuery.data) {
-            handleTaskStop();
-        }
-        
-        // Set state
-        setHasLeftWork(true);
-        
-        // Persist to localStorage
-        const today = new Date().toLocaleDateString();
-        localStorage.setItem('zimmeter_last_left_date', today);
-        
-        showToast('退社しました。お疲れ様でした。', 'success');
+        // Call API
+        leaveWorkMutation.mutate(undefined, {
+            onSuccess: () => {
+                // Set state
+                setHasLeftWork(true);
+                
+                // Persist to localStorage
+                const today = new Date().toLocaleDateString();
+                localStorage.setItem('zimmeter_last_left_date', today);
+                
+                showToast('退社しました。お疲れ様でした。', 'success');
+                setShowIdleAlert(false);
+            },
+            onError: () => {
+                showToast('退社処理に失敗しました', 'error');
+            }
+        });
     }
   };
 
@@ -528,12 +557,25 @@ function ZimmeterApp() {
             />
         )}
 
+        <CheckStatusModal 
+            isOpen={!!checkStatusQuery.data?.needsFix}
+            onClose={() => {
+                // If closed without fix, we might want to re-check or just let it close
+                // But the modal itself has a 'Fix' button which closes it on success.
+                // If user clicks backdrop (if allowed), it closes. 
+                // We should probably force user to interact, but the requirement says "Prompt reminder".
+                // Let's assume closing is fine, it will pop up again next reload/time.
+            }}
+            statusData={checkStatusQuery.data || null}
+            uid={uid}
+        />
+
         <LoginModal 
             isOpen={showLoginModal}
             onSubmit={handleLogin}
         />
 
-        {showIdleAlert && !activeLogQuery.data && !showLoginModal && (
+        {showIdleAlert && !activeLogQuery.data && !showLoginModal && !hasLeftWork && (
             <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 pointer-events-none transition-opacity duration-500">
                 <div className="bg-white px-8 py-6 rounded-2xl shadow-2xl flex flex-col items-center pointer-events-auto animate-bounce border-2 border-red-100">
                     <div className="bg-red-100 p-3 rounded-full mb-3 text-red-500">

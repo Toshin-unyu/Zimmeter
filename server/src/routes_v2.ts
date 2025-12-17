@@ -214,6 +214,170 @@ router.patch('/users/:id/status', async (req: Request, res: Response) => {
   }
 });
 
+// --- User Status Management ---
+
+// Helper: Get JST Date string YYYY-MM-DD
+const getJstDateStr = (date: Date = new Date()) => {
+  // Create a date object for JST
+  const jst = new Date(date.getTime() + 9 * 60 * 60 * 1000);
+  return jst.toISOString().split('T')[0];
+};
+
+// POST /api/status/leave
+// 退社処理: 今日のステータスを「退社済」にする
+router.post('/status/leave', async (req: Request, res: Response) => {
+  try {
+    const currentUser = getUser(req);
+    const dateStr = getJstDateStr(); // Today JST
+
+    // 1. Stop active tasks first
+    const now = new Date();
+    const activeLog = await prisma.workLog.findFirst({
+      where: {
+        userId: currentUser.id,
+        endTime: null,
+      },
+    });
+
+    if (activeLog) {
+      const duration = Math.floor((now.getTime() - activeLog.startTime.getTime()) / 1000);
+      await prisma.workLog.update({
+        where: { id: activeLog.id },
+        data: {
+          endTime: now,
+          duration,
+        },
+      });
+    }
+
+    // 2. Update DailyStatus
+    await prisma.dailyStatus.upsert({
+        where: { userId_date: { userId: currentUser.id, date: dateStr } },
+        create: { userId: currentUser.id, date: dateStr, hasLeft: true, leftAt: now },
+        update: { hasLeft: true, leftAt: now }
+    });
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to leave work' });
+  }
+});
+
+// GET /api/status/check
+// 昨日（または指定日）のステータスチェック
+router.get('/status/check', async (req: Request, res: Response) => {
+  try {
+    const currentUser = getUser(req);
+    
+    // Yesterday JST
+    const nowJst = new Date(Date.now() + 9 * 60 * 60 * 1000);
+    const ystJst = new Date(nowJst.getTime() - 24 * 60 * 60 * 1000);
+    const yesterdayStr = ystJst.toISOString().split('T')[0];
+
+    const status = await prisma.dailyStatus.findUnique({
+        where: { userId_date: { userId: currentUser.id, date: yesterdayStr } }
+    });
+
+    // Check for unstopped tasks started BEFORE today (JST 00:00)
+    const todayStartJst = new Date(nowJst);
+    todayStartJst.setUTCHours(0,0,0,0);
+    // Convert back to UTC for DB query
+    const todayStartUtc = new Date(todayStartJst.getTime() - 9 * 60 * 60 * 1000);
+
+    const unstoppedTask = await prisma.workLog.findFirst({
+        where: {
+            userId: currentUser.id,
+            endTime: null,
+            startTime: { lt: todayStartUtc }
+        }
+    });
+
+    const hasLeft = status?.hasLeft || false;
+    const isFixed = status?.isFixed || false;
+    
+    // Needs fix if: (Not Left OR Has Unstopped Tasks) AND Not Fixed yet
+    const needsFix = (!hasLeft || !!unstoppedTask) && !isFixed;
+
+    res.json({
+        date: yesterdayStr,
+        hasLeft,
+        hasUnstoppedTasks: !!unstoppedTask,
+        needsFix,
+        isFixed
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to check status' });
+  }
+});
+
+// POST /api/status/fix
+// 過去のステータスを「補正済み」にする
+router.post('/status/fix', async (req: Request, res: Response) => {
+  try {
+    const currentUser = getUser(req);
+    const { date } = req.body; // YYYY-MM-DD
+
+    if (!date) return res.status(400).json({ error: 'Date is required' });
+
+    await prisma.dailyStatus.upsert({
+        where: { userId_date: { userId: currentUser.id, date } },
+        create: { 
+            userId: currentUser.id, 
+            date, 
+            isFixed: true, 
+            hasLeft: true // Fixing implies they are done with that day
+        }, 
+        update: { isFixed: true }
+    });
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to fix status' });
+  }
+});
+
+// GET /api/status/monitor
+// 管理者用: 期間指定でステータスを取得
+router.get('/status/monitor', async (req: Request, res: Response) => {
+  try {
+    const currentUser = getUser(req);
+    if (currentUser.role !== 'ADMIN') {
+      return res.status(403).json({ error: 'Admin only' });
+    }
+
+    const { start, end, userIds } = req.query;
+
+    const where: any = {};
+    if (start && end) {
+        where.date = {
+            gte: String(start),
+            lte: String(end)
+        };
+    }
+
+    if (userIds) {
+        const ids = String(userIds).split(',').map(n => Number(n)).filter(n => !isNaN(n));
+        if (ids.length > 0) {
+            where.userId = { in: ids };
+        }
+    }
+
+    const statuses = await prisma.dailyStatus.findMany({
+        where,
+        include: { user: true },
+        orderBy: { date: 'desc' }
+    });
+
+    res.json(statuses);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to fetch status monitor' });
+  }
+});
+
 // --- Category Management ---
 
 // GET /api/categories

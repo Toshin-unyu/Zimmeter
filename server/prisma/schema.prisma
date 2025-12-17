@@ -53,6 +53,7 @@ model User {
   settings   UserSetting?
   logs       WorkLog[]
   categories Category[] // 自分が作成したカテゴリ (Custom)
+  dailyStatuses DailyStatus[]
 
   @@map("users")
 }
@@ -116,4 +117,20 @@ model WorkLog {
 
   @@index([userId, startTime])
   @@map("work_logs")
+}
+
+model DailyStatus {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  date      String   // YYYY-MM-DD
+  hasLeft   Boolean  @default(false)
+  leftAt    DateTime?
+  isFixed   Boolean  @default(false) // Retroactively fixed (supplementary entry)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, date])
+  @@map("daily_statuses")
 }

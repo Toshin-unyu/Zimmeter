@@ -22,6 +22,15 @@ interface MonitorLog {
   updatedAt: string;
 }
 
+interface DailyStatus {
+  id: number;
+  userId: number;
+  date: string; // YYYY-MM-DD
+  hasLeft: boolean;
+  leftAt?: string;
+  isFixed: boolean;
+}
+
 interface MonitorTableProps {
   selectedUsers?: number[];
   timeRange?: 'daily' | 'weekly' | 'last30days' | 'monthly' | 'custom';
@@ -31,6 +40,47 @@ interface MonitorTableProps {
 
 export const MonitorTable = ({ selectedUsers = [], timeRange = 'daily', customStartDate, customEndDate }: MonitorTableProps) => {
   const [editingLog, setEditingLog] = useState<MonitorLog | null>(null);
+
+  // Calculate date range for status fetch
+  const getDateRangeForStatus = () => {
+    const end = new Date();
+    const start = new Date();
+    
+    if (timeRange === 'daily') {
+      start.setDate(end.getDate() - 1); // Get yesterday too
+    } else if (timeRange === 'weekly') {
+      start.setDate(end.getDate() - 7);
+    } else if (timeRange === 'last30days') {
+      start.setDate(end.getDate() - 30);
+    } else if (timeRange === 'monthly') {
+      start.setFullYear(end.getFullYear() - 1); // Yearly view
+    } else if (timeRange === 'custom' && customStartDate && customEndDate) {
+      return { start: customStartDate, end: customEndDate };
+    }
+    
+    return { 
+      start: start.toISOString().split('T')[0], 
+      end: end.toISOString().split('T')[0] 
+    };
+  };
+
+  const statusRange = getDateRangeForStatus();
+
+  const { data: dailyStatuses } = useQuery({
+    queryKey: ['dailyStatuses', selectedUsers, statusRange],
+    queryFn: async () => {
+      const params: any = { 
+        start: statusRange.start, 
+        end: statusRange.end 
+      };
+      if (selectedUsers.length > 0) {
+        params.userIds = selectedUsers.join(',');
+      }
+      const res = await api.get<DailyStatus[]>('/status/monitor', { params });
+      return res.data;
+    },
+    refetchInterval: 30000,
+  });
 
   const { data: logs, isLoading } = useQuery({
     queryKey: ['monitorLogs', selectedUsers, timeRange, customStartDate, customEndDate],
@@ -121,10 +171,23 @@ export const MonitorTable = ({ selectedUsers = [], timeRange = 'daily', customSt
       doc.setFontSize(16);
       doc.text(`Activity Log (${getTimeRangeLabel()})`, 14, 20);
       
-      const tableColumn = ["Time", "User", "Role", "UID", "Task", "Type", "Mod Time", "Duration"];
+      const tableColumn = ["Time", "User", "Role", "UID", "Daily Status", "Task", "Type", "Mod Time", "Duration"];
       const tableRows: any[] = [];
 
       logs.forEach(log => {
+        // Determine Daily Status
+        const logDate = new Date(log.startTime);
+        const dateKey = logDate.toLocaleDateString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit' }).replaceAll('/', '-');
+        const status = dailyStatuses?.find(s => s.userId === log.userId && s.date === dateKey);
+        
+        let statusStr = '-';
+        if (status) {
+            const dateShort = `${logDate.getMonth() + 1}.${logDate.getDate()}`;
+            if (status.isFixed) statusStr = `${dateShort} 補正済`;
+            else if (status.hasLeft) statusStr = `${dateShort} 退社済`;
+            else statusStr = `${dateShort} 未退社`;
+        }
+
         // Determine Type Label and Modification Time logic
         let typeLabel = '通常';
         let modTimeStr = '';
@@ -147,6 +210,7 @@ export const MonitorTable = ({ selectedUsers = [], timeRange = 'daily', customSt
           log.user.name,
           log.user.role,
           log.user.uid,
+          statusStr,
           log.categoryNameSnapshot,
           typeLabel,
           modTimeStr,
@@ -222,6 +286,7 @@ export const MonitorTable = ({ selectedUsers = [], timeRange = 'daily', customSt
               <tr>
                 <th className="p-3 font-medium">Time</th>
                 <th className="p-3 font-medium">User / Role</th>
+                <th className="p-3 font-medium">Daily Status</th>
                 <th className="p-3 font-medium">Task</th>
                 <th className="p-3 font-medium">Type</th>
                 <th className="p-3 font-medium text-right">Duration</th>
@@ -230,11 +295,11 @@ export const MonitorTable = ({ selectedUsers = [], timeRange = 'daily', customSt
             </thead>
             <tbody className="divide-y divide-gray-100">
               {isLoading && selectedUsers.length > 0 && (
-                <tr><td colSpan={6} className="p-8 text-center text-gray-400">読み込み中...</td></tr>
+                <tr><td colSpan={7} className="p-8 text-center text-gray-400">読み込み中...</td></tr>
               )}
               
               {selectedUsers.length === 0 && (
-                <tr><td colSpan={6} className="p-8 text-center text-gray-400">ユーザーを選択してください</td></tr>
+                <tr><td colSpan={7} className="p-8 text-center text-gray-400">ユーザーを選択してください</td></tr>
               )}
 
               {selectedUsers.length > 0 && !isLoading && logs?.map((log) => {
@@ -248,6 +313,36 @@ export const MonitorTable = ({ selectedUsers = [], timeRange = 'daily', customSt
                     : bgClass.split(' ')[0].replace('bg-', 'text-').replace('-100', '-600').replace('-50', '-500');
                 
                 const isLongDuration = !log.duration && (new Date().getTime() - new Date(log.startTime).getTime()) > 1000 * 60 * 60 * 3; // 3時間以上経過
+
+                // Daily Status Logic
+                const logDate = new Date(log.startTime);
+                // Format YYYY-MM-DD
+                const dateKey = logDate.toLocaleDateString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit' }).replaceAll('/', '-');
+                const status = dailyStatuses?.find(s => s.userId === log.userId && s.date === dateKey);
+
+                let statusText = '-';
+                let statusColor = 'text-gray-400';
+                
+                if (status) {
+                    const dateShort = `${logDate.getMonth() + 1}.${logDate.getDate()}`;
+                    if (status.isFixed) {
+                        statusText = `${dateShort} 補正済`;
+                        statusColor = 'text-blue-600 font-medium';
+                    } else if (status.hasLeft) {
+                        statusText = `${dateShort} 退社済`;
+                        statusColor = 'text-green-600';
+                    } else {
+                        statusText = `${dateShort} 未退社`;
+                        statusColor = 'text-red-500 font-bold';
+                    }
+                } else {
+                    // Check if it's today
+                    const todayKey = new Date().toLocaleDateString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit' }).replaceAll('/', '-');
+                    if (dateKey === todayKey) {
+                        statusText = '勤務中';
+                        statusColor = 'text-blue-500';
+                    }
+                }
 
                 // Type Label Logic
                 let typeLabel = '通常';
@@ -288,6 +383,9 @@ export const MonitorTable = ({ selectedUsers = [], timeRange = 'daily', customSt
                       <div className="font-medium text-gray-900">{log.user.name}</div>
                       <div className="text-xs text-gray-400">Role: {log.user.role}</div>
                     </td>
+                    <td className="p-3 whitespace-nowrap">
+                        <span className={`text-xs ${statusColor}`}>{statusText}</span>
+                    </td>
                     <td className="p-3">
                       <span className={`font-medium ${color}`}>
                         {log.categoryNameSnapshot}
@@ -325,7 +423,7 @@ export const MonitorTable = ({ selectedUsers = [], timeRange = 'daily', customSt
               })}
               
               {selectedUsers.length > 0 && !isLoading && logs?.length === 0 && (
-                  <tr><td colSpan={6} className="p-8 text-center text-gray-400">履歴がありません</td></tr>
+                  <tr><td colSpan={7} className="p-8 text-center text-gray-400">履歴がありません</td></tr>
               )}
             </tbody>
           </table>
