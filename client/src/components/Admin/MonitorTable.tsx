@@ -17,6 +17,9 @@ interface MonitorLog {
   categoryNameSnapshot: string;
   startTime: string;
   duration?: number;
+  isManual?: boolean;
+  isEdited?: boolean;
+  updatedAt: string;
 }
 
 interface MonitorTableProps {
@@ -87,7 +90,7 @@ export const MonitorTable = ({ selectedUsers = [], timeRange = 'daily', customSt
     }
 
     try {
-      const doc = new jsPDF();
+      const doc = new jsPDF('l'); // Landscape for more columns
       
       // Load Japanese font (IPAex Gothic)
       const fontUrl = '/fonts/ipaexg.ttf';
@@ -118,15 +121,35 @@ export const MonitorTable = ({ selectedUsers = [], timeRange = 'daily', customSt
       doc.setFontSize(16);
       doc.text(`Activity Log (${getTimeRangeLabel()})`, 14, 20);
       
-      const tableColumn = ["Time", "User", "UID", "Task", "Duration"];
+      const tableColumn = ["Time", "User", "Role", "UID", "Task", "Type", "Mod Time", "Duration"];
       const tableRows: any[] = [];
 
       logs.forEach(log => {
+        // Determine Type Label and Modification Time logic
+        let typeLabel = '通常';
+        let modTimeStr = '';
+        
+        if (log.isManual) {
+            if (log.isEdited) {
+                typeLabel = '作成済(変更済)';
+                modTimeStr = new Date(log.updatedAt).toLocaleString([], { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+            } else {
+                typeLabel = '作成済';
+                modTimeStr = new Date(log.updatedAt).toLocaleString([], { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+            }
+        } else if (log.isEdited) {
+            typeLabel = '変更済';
+            modTimeStr = new Date(log.updatedAt).toLocaleString([], { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+        }
+
         const logData = [
           new Date(log.startTime).toLocaleString([], { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
           log.user.name,
+          log.user.role,
           log.user.uid,
           log.categoryNameSnapshot,
+          typeLabel,
+          modTimeStr,
           log.duration ? `${Math.floor(log.duration / 60)}m` : 'Running'
         ];
         tableRows.push(logData);
