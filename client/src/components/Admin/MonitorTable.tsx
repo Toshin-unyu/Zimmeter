@@ -200,17 +200,18 @@ export const MonitorTable = ({ selectedUsers = [], timeRange = 'daily', customSt
                 <th className="p-3 font-medium">Time</th>
                 <th className="p-3 font-medium">User / Role</th>
                 <th className="p-3 font-medium">Task</th>
+                <th className="p-3 font-medium">Type</th>
                 <th className="p-3 font-medium text-right">Duration</th>
                 <th className="p-3 font-medium text-center">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {isLoading && selectedUsers.length > 0 && (
-                <tr><td colSpan={5} className="p-8 text-center text-gray-400">読み込み中...</td></tr>
+                <tr><td colSpan={6} className="p-8 text-center text-gray-400">読み込み中...</td></tr>
               )}
               
               {selectedUsers.length === 0 && (
-                <tr><td colSpan={5} className="p-8 text-center text-gray-400">ユーザーを選択してください</td></tr>
+                <tr><td colSpan={6} className="p-8 text-center text-gray-400">ユーザーを選択してください</td></tr>
               )}
 
               {selectedUsers.length > 0 && !isLoading && logs?.map((log) => {
@@ -225,6 +226,36 @@ export const MonitorTable = ({ selectedUsers = [], timeRange = 'daily', customSt
                 
                 const isLongDuration = !log.duration && (new Date().getTime() - new Date(log.startTime).getTime()) > 1000 * 60 * 60 * 3; // 3時間以上経過
 
+                // Type Label Logic
+                let typeLabel = '通常';
+                let showModTime = false;
+                let typeColor = 'text-gray-500';
+
+                if (log.isManual) {
+                    if (log.isEdited) {
+                        typeLabel = '作成済(変更済)';
+                        showModTime = true;
+                        typeColor = 'text-orange-600';
+                    } else {
+                        typeLabel = '作成済';
+                        showModTime = true; // Manual logs usually interesting to know when created/updated? Or just keep simple. 
+                        // Requirement says "display modification time". For created, maybe creation time is start time?
+                        // Let's follow PDF logic: "showModTime = true" for Manual? 
+                        // In PDF I set showModTime = true for Manual (both edited and not).
+                        // Wait, PDF code:
+                        // if (log.isManual) {
+                        //   if (log.isEdited) { typeLabel='作成済(変更済)'; showModTime=true; }
+                        //   else { typeLabel='作成済'; showModTime=true; } 
+                        // }
+                        // So yes, manual logs show mod time (which is updatedAt).
+                        typeColor = 'text-blue-600';
+                    }
+                } else if (log.isEdited) {
+                    typeLabel = '変更済';
+                    showModTime = true;
+                    typeColor = 'text-orange-600';
+                }
+
                 return (
                   <tr key={log.id} className="hover:bg-blue-50/50 transition-colors">
                     <td className="p-3 font-mono text-gray-500 whitespace-nowrap">
@@ -238,6 +269,14 @@ export const MonitorTable = ({ selectedUsers = [], timeRange = 'daily', customSt
                       <span className={`font-medium ${color}`}>
                         {log.categoryNameSnapshot}
                       </span>
+                    </td>
+                    <td className="p-3">
+                        <div className={`text-xs font-medium ${typeColor}`}>{typeLabel}</div>
+                        {showModTime && (
+                            <div className="text-[10px] text-gray-400">
+                                {new Date(log.updatedAt).toLocaleString([], { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                            </div>
+                        )}
                     </td>
                     <td className="p-3 text-right font-mono text-gray-600">
                       {log.duration ? (
@@ -263,7 +302,7 @@ export const MonitorTable = ({ selectedUsers = [], timeRange = 'daily', customSt
               })}
               
               {selectedUsers.length > 0 && !isLoading && logs?.length === 0 && (
-                  <tr><td colSpan={5} className="p-8 text-center text-gray-400">履歴がありません</td></tr>
+                  <tr><td colSpan={6} className="p-8 text-center text-gray-400">履歴がありません</td></tr>
               )}
             </tbody>
           </table>
