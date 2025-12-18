@@ -349,11 +349,21 @@ function ZimmeterApp() {
 
   if (!uid && !showLoginModal) return <div className="p-10">Loading...</div>;
 
+  // Header z-index logic:
+  // For ADMIN who has left work, header must be above overlay (z-[101]) to allow tab switching.
+  // Otherwise default z-20 is fine.
+  const headerZIndex = (hasLeftWork && userStatus?.role === 'ADMIN') ? 'z-[101]' : 'z-20';
+
+  // Overlay visibility logic:
+  // Show if hasLeftWork is true
+  // BUT if ADMIN, only show on 'main' tab (hide on 'admin' tab)
+  const showLeaveOverlay = hasLeftWork && (userStatus?.role !== 'ADMIN' || activeTab === 'main');
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 text-gray-800 font-sans">
         <StatusGuard />
         {/* Header */}
-        <header className="bg-white shadow px-4 lg:px-6 h-16 flex justify-between items-center sticky top-0 z-20 whitespace-nowrap">
+        <header className={`bg-white shadow px-4 lg:px-6 h-16 flex justify-between items-center sticky top-0 ${headerZIndex} whitespace-nowrap`}>
             <div className="flex items-center gap-2 lg:gap-8 overflow-hidden">
                 <div className="flex items-center gap-2 lg:gap-4 shrink-0">
                     <h1 className="text-xl lg:text-2xl font-bold tracking-tight text-gray-700 hidden sm:block">Zimmeter</h1>
@@ -607,7 +617,7 @@ function ZimmeterApp() {
         )}
 
         {/* Leave Work Overlay */}
-        {hasLeftWork && (
+        {showLeaveOverlay && (
             <div className="fixed inset-0 bg-green-50/95 z-[100] flex flex-col items-center justify-center backdrop-blur-sm">
                 <div className="bg-white p-10 rounded-3xl shadow-xl flex flex-col items-center border-4 border-green-100 max-w-lg mx-4">
                     <div className="bg-green-100 p-6 rounded-full mb-6 text-green-600 animate-pulse">
