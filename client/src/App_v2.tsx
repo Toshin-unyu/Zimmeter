@@ -40,6 +40,7 @@ interface UserSettings {
   preferences: {
     primaryButtons?: number[]; // IDs
     secondaryButtons?: number[];
+    hiddenButtons?: number[];
   };
 }
 
@@ -208,6 +209,7 @@ function ZimmeterApp() {
     // Create copies to avoid mutating original preferences
     let primaryIds = [...(prefs.primaryButtons || [])];
     let secondaryIds = [...(prefs.secondaryButtons || [])];
+    const hiddenIds = prefs.hiddenButtons || [];
 
     const sorted = [...allCats].sort((a, b) => a.priority - b.priority);
 
@@ -220,8 +222,13 @@ function ZimmeterApp() {
        primaryIds = sorted.filter(c => c.type === 'SYSTEM' && c.defaultList === 'PRIMARY').map(c => c.id);
        secondaryIds = sorted.filter(c => c.type === 'SYSTEM' && c.defaultList !== 'PRIMARY' && c.defaultList !== 'HIDDEN').map(c => c.id);
     } else {
-      // Merge logic: Find SYSTEM items that exist in allCats but are NOT in user preferences
-      const orphanCats = sorted.filter(c => c.type === 'SYSTEM' && !primaryIds.includes(c.id) && !secondaryIds.includes(c.id));
+      // Merge logic: Find SYSTEM items that exist in allCats but are NOT in user preferences AND are not explicitly hidden
+      const orphanCats = sorted.filter(c => 
+        c.type === 'SYSTEM' && 
+        !primaryIds.includes(c.id) && 
+        !secondaryIds.includes(c.id) &&
+        !hiddenIds.includes(c.id)
+      );
       
       orphanCats.forEach(c => {
         const shouldShow = c.defaultList === 'PRIMARY' || c.defaultList === 'SECONDARY';

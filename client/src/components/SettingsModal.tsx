@@ -37,7 +37,7 @@ export const SettingsModal = ({ isOpen, onClose, uid, categories, initialPrimary
 
   // 1. Save Display Settings (Preferences)
   const settingsMutation = useMutation({
-    mutationFn: async (data: { primaryButtons: number[]; secondaryButtons: number[] }) => {
+    mutationFn: async (data: { primaryButtons: number[]; secondaryButtons: number[]; hiddenButtons: number[] }) => {
       // Execute pending deletes
       if (pendingDeletes.length > 0) {
         await Promise.all(pendingDeletes.map(id => api.delete(`/categories/${id}`)));
@@ -112,26 +112,6 @@ export const SettingsModal = ({ isOpen, onClose, uid, categories, initialPrimary
     }
   });
 
-  // 4. Delete Category
-  const deleteMutation = useMutation({
-    mutationFn: async (id: number) => {
-      return api.delete(`/categories/${id}`);
-    },
-    onSuccess: (_, id) => {
-      queryClient.invalidateQueries({ queryKey: ['categories', uid] });
-      // Remove from lists
-      const newPrimary = primary.filter(pid => pid !== id);
-      const newSecondary = secondary.filter(sid => sid !== id);
-      setPrimary(newPrimary);
-      setSecondary(newSecondary);
-      showToast('カテゴリを削除しました', 'success');
-      
-      // Auto-save is disabled
-    },
-    onError: () => {
-        showToast('カテゴリの削除に失敗しました', 'error');
-    }
-  });
 
   // 5. Reorder Categories
   const reorderMutation = useMutation({
@@ -187,9 +167,16 @@ export const SettingsModal = ({ isOpen, onClose, uid, categories, initialPrimary
       reorderMutation.mutate(updates);
     } else {
       // User: Save Personal Preferences
+      // Calculate hidden buttons explicitly
+      const activeCategories = categories.filter(c => !pendingDeletes.includes(c.id));
+      const hiddenButtons = activeCategories
+        .filter(c => !primary.includes(c.id) && !secondary.includes(c.id))
+        .map(c => c.id);
+
       settingsMutation.mutate({ 
         primaryButtons: primary, 
-        secondaryButtons: secondary
+        secondaryButtons: secondary,
+        hiddenButtons: hiddenButtons
       });
     }
   };
