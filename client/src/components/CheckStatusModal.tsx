@@ -20,19 +20,23 @@ interface CheckStatusModalProps {
 export const CheckStatusModal = ({ isOpen, onClose, statusData, uid }: CheckStatusModalProps) => {
   const queryClient = useQueryClient();
   const [isInputMode, setIsInputMode] = useState(false);
-  const [leaveTime, setLeaveTime] = useState('');
+  const [leaveTime, setLeaveTime] = useState('18:00');
 
   const handleStartFix = () => {
-    if (statusData) {
-        setLeaveTime(`${statusData.date}T18:00`);
-    }
+    // Default to 18:00 if resetting, or keep previous edit? 
+    // Resetting to default makes sense for a fresh open.
+    // But state is preserved if just switching modes? 
+    // Let's just set input mode. leaveTime defaults to '18:00' in useState.
     setIsInputMode(true);
   };
 
   const fixMutation = useMutation({
     mutationFn: async () => {
       if (!statusData) return;
-      const dateObj = new Date(leaveTime);
+      // Combine date and time
+      const dateTimeStr = `${statusData.date}T${leaveTime}`;
+      const dateObj = new Date(dateTimeStr);
+      
       return api.post('/status/fix', { 
           date: statusData.date,
           leaveTime: dateObj.toISOString()
@@ -45,6 +49,7 @@ export const CheckStatusModal = ({ isOpen, onClose, statusData, uid }: CheckStat
       queryClient.invalidateQueries({ queryKey: ['monitorLogs'] }); // Also refresh monitor
       onClose();
       setIsInputMode(false);
+      setLeaveTime('18:00'); // Reset
     },
   });
 
@@ -124,15 +129,25 @@ export const CheckStatusModal = ({ isOpen, onClose, statusData, uid }: CheckStat
                             <label className="block text-sm font-bold text-gray-700 mb-2">
                                 退社時間を入力してください
                             </label>
+                            
+                            <div className="flex items-center gap-2 mb-2 p-2 bg-gray-50 rounded border border-gray-200">
+                                <span className="text-gray-500 text-sm">対象日:</span>
+                                <span className="font-bold text-gray-800">{statusData.date}</span>
+                            </div>
+
                             <input
-                                type="datetime-local"
+                                type="time"
                                 className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-lg"
                                 value={leaveTime}
                                 onChange={(e) => setLeaveTime(e.target.value)}
                             />
-                            <p className="text-xs text-gray-500 mt-2 bg-yellow-50 p-2 rounded border border-yellow-100">
-                                ※この時間が未停止タスクの終了時間として記録されます。
-                            </p>
+                            
+                            {statusData.hasUnstoppedTasks && (
+                                <p className="text-xs text-red-500 mt-2 bg-red-50 p-2 rounded border border-red-100 flex items-center gap-1">
+                                    <AlertTriangle size={12} />
+                                    <span>未停止タスクの終了時間として記録されます。</span>
+                                </p>
+                            )}
                         </div>
 
                         <div className="flex gap-3 w-full mt-6">

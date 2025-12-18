@@ -293,11 +293,37 @@ router.get('/status/check', async (req: Request, res: Response) => {
         }
     });
 
+    // Check if any logs exist for yesterday (to skip fix for holidays/new users)
+    // yesterdayStr is YYYY-MM-DD
+    const [yYear, yMonth, yDay] = yesterdayStr.split('-').map(Number);
+    // JST 00:00:00 = UTC Previous Day 15:00:00
+    const yesterdayStartJst = new Date(Date.UTC(yYear, yMonth - 1, yDay, -9, 0, 0, 0));
+    // JST 23:59:59 = UTC Today 14:59:59
+    const yesterdayEndJst = new Date(Date.UTC(yYear, yMonth - 1, yDay, 14, 59, 59, 999));
+
+    const yesterdayLogCount = await prisma.workLog.count({
+        where: {
+            userId: currentUser.id,
+            startTime: {
+                gte: yesterdayStartJst,
+                lte: yesterdayEndJst
+            }
+        }
+    });
+    
+    const hasYesterdayLogs = yesterdayLogCount > 0;
+
     const hasLeft = status?.hasLeft || false;
     const isFixed = status?.isFixed || false;
     
-    // Needs fix if: (Not Left OR Has Unstopped Tasks) AND Not Fixed yet
-    const needsFix = (!hasLeft || !!unstoppedTask) && !isFixed;
+    // Needs fix if:
+    // 1. Has unstopped task (Critical)
+    // OR
+    // 2. Has logs yesterday BUT hasn't left (Forgot to click leave)
+    // AND
+    // 3. Not fixed yet
+    // If no logs yesterday and no unstopped task, we assume it was a holiday or new user -> No fix needed.
+    const needsFix = !isFixed && (!!unstoppedTask || (hasYesterdayLogs && !hasLeft));
 
     res.json({
         date: yesterdayStr,
@@ -337,19 +363,21 @@ router.post('/status/fix', async (req: Request, res: Response) => {
         const endOfDayJst = new Date(Date.UTC(year, month - 1, day, 14, 59, 59, 999));
 
         // Find the target log to update
-        // Priority 1: Find an ACTIVE log (endTime: null) started on that day
+        // Priority 1: Find an ACTIVE log (endTime: null) started BEFORE or ON the target day end
+        // This handles cases where a task was left running for multiple days (e.g. over a weekend/holiday)
         let targetLog = await prisma.workLog.findFirst({
             where: {
                 userId: currentUser.id,
                 startTime: {
-                    gte: startOfDayJst,
                     lte: endOfDayJst
                 },
                 endTime: null
             }
         });
 
-        // Priority 2: If no active log, find the LAST log started on that day
+        // Priority 2: If no active log, find the LAST log started on that specific day
+        // This is for correcting a day where tasks were already closed but maybe incorrectly? 
+        // Or just attaching the leave time to the last task if it wasn't recorded properly.
         if (!targetLog) {
             targetLog = await prisma.workLog.findFirst({
                 where: {
