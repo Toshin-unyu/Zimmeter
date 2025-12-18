@@ -16,6 +16,7 @@ interface MonitorLog {
   category: { name: string };
   categoryNameSnapshot: string;
   startTime: string;
+  endTime?: string | null;
   duration?: number;
   isManual?: boolean;
   isEdited?: boolean;
@@ -341,7 +342,7 @@ export const MonitorTable = ({ selectedUsers = [], timeRange = 'daily', customSt
                 if (status) {
                     const dateShort = `${logDate.getMonth() + 1}.${logDate.getDate()}`;
                     if (status.isFixed) {
-                        statusText = `${dateShort} 未退社(補正済)`;
+                        statusText = `${dateShort} 退社済(補正済)`;
                         statusColor = 'text-blue-600 font-medium';
                     } else if (status.hasLeft) {
                         statusText = `${dateShort} 退社済`;
@@ -419,8 +420,8 @@ export const MonitorTable = ({ selectedUsers = [], timeRange = 'daily', customSt
                         )}
                     </td>
                     <td className="p-3 text-right font-mono text-gray-600">
-                      {log.duration ? (
-                         <span>{Math.floor(log.duration / 60)}m</span>
+                      {log.endTime ? (
+                         <span>{Math.floor((log.duration || 0) / 60)}m</span>
                       ) : (
                          <span className={`inline-flex items-center gap-1 ${isLongDuration ? 'text-red-500 font-bold animate-pulse' : 'text-green-600'}`}>
                            <Clock size={12} />

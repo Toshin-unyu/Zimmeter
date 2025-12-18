@@ -323,27 +323,56 @@ router.post('/status/fix', async (req: Request, res: Response) => {
 
     let leftAtDate: Date | undefined;
 
-    // 1. If leaveTime provided, close unstopped tasks
+    // 1. If leaveTime provided, update the last task of the day
     if (leaveTime) {
         leftAtDate = new Date(leaveTime);
         
-        // Find any active log (endTime is null)
-        const activeLog = await prisma.workLog.findFirst({
+        // Calculate Day Range (JST) to find the target log
+        // date is YYYY-MM-DD
+        const [year, month, day] = date.split('-').map(Number);
+        
+        // JST 00:00:00 = UTC Previous Day 15:00:00
+        const startOfDayJst = new Date(Date.UTC(year, month - 1, day, -9, 0, 0, 0));
+        // JST 23:59:59 = UTC Today 14:59:59
+        const endOfDayJst = new Date(Date.UTC(year, month - 1, day, 14, 59, 59, 999));
+
+        // Find the target log to update
+        // Priority 1: Find an ACTIVE log (endTime: null) started on that day
+        let targetLog = await prisma.workLog.findFirst({
             where: {
                 userId: currentUser.id,
-                endTime: null,
+                startTime: {
+                    gte: startOfDayJst,
+                    lte: endOfDayJst
+                },
+                endTime: null
             }
         });
 
-        if (activeLog) {
+        // Priority 2: If no active log, find the LAST log started on that day
+        if (!targetLog) {
+            targetLog = await prisma.workLog.findFirst({
+                where: {
+                    userId: currentUser.id,
+                    startTime: {
+                        gte: startOfDayJst,
+                        lte: endOfDayJst
+                    }
+                },
+                orderBy: { startTime: 'desc' }
+            });
+        }
+
+        if (targetLog) {
             // Ensure leaveTime is after startTime
-            if (leftAtDate.getTime() > activeLog.startTime.getTime()) {
-                const duration = Math.floor((leftAtDate.getTime() - activeLog.startTime.getTime()) / 1000);
+            if (leftAtDate.getTime() > targetLog.startTime.getTime()) {
+                const duration = Math.floor((leftAtDate.getTime() - targetLog.startTime.getTime()) / 1000);
                 await prisma.workLog.update({
-                    where: { id: activeLog.id },
+                    where: { id: targetLog.id },
                     data: {
                         endTime: leftAtDate,
-                        duration
+                        duration,
+                        isEdited: true // Mark as edited so history logic respects the fixed duration
                     }
                 });
             }
@@ -635,7 +664,7 @@ router.post('/logs/switch', async (req: Request, res: Response) => {
         });
       }
 
-      // 2. Create new log
+      // 3. Create new log
       const newLog = await tx.workLog.create({
         data: {
           userId: currentUser.id,
@@ -697,7 +726,7 @@ router.patch('/logs/:id', async (req: Request, res: Response) => {
   try {
     const currentUser = getUser(req);
     const { id } = req.params;
-    const { categoryId } = req.body;
+    const { categoryId, startTime, endTime } = req.body;
 
     const log = await prisma.workLog.findUnique({ where: { id: Number(id) } });
     if (!log) return res.status(404).json({ error: 'Log not found' });
@@ -707,23 +736,55 @@ router.patch('/logs/:id', async (req: Request, res: Response) => {
         return res.status(403).json({ error: 'Forbidden' });
     }
 
-    // カテゴリ情報の取得 (スナップショット更新用)
-    const category = await prisma.category.findUnique({
-      where: { id: Number(categoryId) },
-    });
+    console.log(`[PATCH Log ${id}] Request body:`, req.body);
 
-    if (!category) {
-      return res.status(404).json({ error: 'Category not found' });
+    const data: any = {
+        isEdited: true, // 内容変更フラグ
+    };
+
+    if (categoryId) {
+        // カテゴリ情報の取得 (スナップショット更新用)
+        const category = await prisma.category.findUnique({
+          where: { id: Number(categoryId) },
+        });
+    
+        if (!category) {
+          return res.status(404).json({ error: 'Category not found' });
+        }
+        data.categoryId = Number(categoryId);
+        data.categoryNameSnapshot = category.name;
+    }
+
+    if (startTime) {
+        data.startTime = new Date(startTime);
+    }
+    
+    if (endTime) {
+        data.endTime = new Date(endTime);
+    } else if (endTime === null) {
+        data.endTime = null;
+        data.duration = null;
+    }
+
+    // Recalculate duration if time changed
+    const newStart = data.startTime ? data.startTime : log.startTime;
+    const newEnd = data.endTime !== undefined ? data.endTime : log.endTime; // check undefined to allow null
+
+    console.log(`[PATCH Log ${id}] Recalculating duration. NewStart: ${newStart}, NewEnd: ${newEnd}`);
+
+    if (newStart && newEnd) {
+        data.duration = Math.floor((newEnd.getTime() - newStart.getTime()) / 1000);
+        console.log(`[PATCH Log ${id}] Calculated duration: ${data.duration} seconds`);
+    } else {
+        console.log(`[PATCH Log ${id}] Cannot calculate duration (missing start or end)`);
     }
 
     const updatedLog = await prisma.workLog.update({
       where: { id: Number(id) },
-      data: {
-        categoryId: Number(categoryId),
-        categoryNameSnapshot: category.name,
-        isEdited: true, // 内容変更フラグ
-      },
+      data,
     });
+    
+    console.log(`[PATCH Log ${id}] Updated log result:`, updatedLog);
 
     res.json(updatedLog);
   } catch (error) {
@@ -784,6 +845,11 @@ router.get('/logs/history', async (req: Request, res: Response) => {
 
     // 各項目のdurationを「次の項目の開始時間との差」で再計算
     const updatedLogs = logs.map((log, index) => {
+      // 編集済みフラグがあり、かつ終了時間が設定されている場合は、DBの値を優先する（隙間を許容）
+      if (log.isEdited && log.endTime) {
+         return log;
+      }
+
       const nextLog = logs[index + 1];
       
       // 次のログがある場合：次のログの開始時間までをこのログの期間とする（隙間なし）

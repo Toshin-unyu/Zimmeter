@@ -42,6 +42,7 @@ export const CheckStatusModal = ({ isOpen, onClose, statusData, uid }: CheckStat
       queryClient.invalidateQueries({ queryKey: ['statusCheck', uid] });
       queryClient.invalidateQueries({ queryKey: ['activeLog', uid] });
       queryClient.invalidateQueries({ queryKey: ['history', uid] });
+      queryClient.invalidateQueries({ queryKey: ['monitorLogs'] }); // Also refresh monitor
       onClose();
       setIsInputMode(false);
     },

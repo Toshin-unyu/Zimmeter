@@ -31,12 +31,17 @@ export const SettingsModal = ({ isOpen, onClose, uid, categories, initialPrimary
   const [newLabel, setNewLabel] = useState('');
   const [selectedPreset, setSelectedPreset] = useState<ColorPreset>(COLOR_PRESETS[0]);
   const [editCategory, setEditCategory] = useState<Category | null>(null);
+  const [pendingDeletes, setPendingDeletes] = useState<number[]>([]);
 
   // --- API Mutations ---
 
   // 1. Save Display Settings (Preferences)
   const settingsMutation = useMutation({
     mutationFn: async (data: { primaryButtons: number[]; secondaryButtons: number[] }) => {
+      // Execute pending deletes
+      if (pendingDeletes.length > 0) {
+        await Promise.all(pendingDeletes.map(id => api.delete(`/categories/${id}`)));
+      }
       return api.post('/settings', { preferences: data });
     },
     onSuccess: () => {
@@ -131,6 +136,10 @@ export const SettingsModal = ({ isOpen, onClose, uid, categories, initialPrimary
   // 5. Reorder Categories
   const reorderMutation = useMutation({
     mutationFn: async (orders: { id: number; priority: number; defaultList?: string }[]) => {
+      // Execute pending deletes first
+      if (pendingDeletes.length > 0) {
+        await Promise.all(pendingDeletes.map(id => api.delete(`/categories/${id}`)));
+      }
       return api.put('/categories/reorder', { orders });
     },
     onSuccess: () => {
@@ -151,7 +160,11 @@ export const SettingsModal = ({ isOpen, onClose, uid, categories, initialPrimary
     if (isAdmin) {
       // Admin: Update Global Priorities (Category.priority)
       // 1. Gather all IDs in order: Primary -> Secondary -> Hidden
-      const hiddenIds = categories
+      
+      // Filter out pending deletes
+      const activeCategories = categories.filter(c => !pendingDeletes.includes(c.id));
+      
+      const hiddenIds = activeCategories
         .filter(c => !primary.includes(c.id) && !secondary.includes(c.id))
         .map(c => c.id);
 
@@ -180,6 +193,8 @@ export const SettingsModal = ({ isOpen, onClose, uid, categories, initialPrimary
       });
     }
   };
+  
+  // ...
 
   const handleCreateOrUpdate = () => {
     if (!newLabel.trim()) return;
@@ -192,16 +207,9 @@ export const SettingsModal = ({ isOpen, onClose, uid, categories, initialPrimary
         borderColor: selectedPreset.border
       });
     } else {
-      // 主画面設定で作成する項目は、Adminであっても個人用(CUSTOM)とする
-      // システム共有(SYSTEM)項目は管理画面のプロジェクト管理から作成する運用とする
       const type = 'CUSTOM';
-      // 新規作成時は最後尾に追加（現在の最大priority + 10）
       const maxPriority = categories.length > 0 ? Math.max(...categories.map(c => c.priority || 0)) : 0;
-      
-      // 画面上での追加先（保存ボタンを押すまではサーバー上のdefaultListはHIDDENにしておく）
-      // これにより、保存前にメイン画面に反映されてしまうのを防ぐ
       const defaultList = 'HIDDEN';
-      
       createMutation.mutate({ 
         name: newLabel.trim(), 
         type, 
@@ -214,15 +222,12 @@ export const SettingsModal = ({ isOpen, onClose, uid, categories, initialPrimary
   };
 
   const handleEditClick = (cat: Category) => {
-    // Prevent editing SYSTEM categories - only admin in management screen can edit them
     if (cat.type === 'SYSTEM') {
       showToast('システムカテゴリは編集できません', 'error');
       return;
     }
     setEditCategory(cat);
     setNewLabel(cat.name);
-    
-    // Find matching preset or default to first
     const preset = COLOR_PRESETS.find(p => p.bg === cat.bgColor) || COLOR_PRESETS[0];
     setSelectedPreset(preset);
   };
@@ -234,8 +239,16 @@ export const SettingsModal = ({ isOpen, onClose, uid, categories, initialPrimary
       showToast('システムカテゴリは削除できません', 'error');
       return;
     }
-    if (window.confirm('このカテゴリを削除しますか？\n（過去の履歴データは保持されます）')) {
-      deleteMutation.mutate(id);
+    if (window.confirm('このカテゴリを削除しますか？\n（保存ボタンを押すと完全に削除されます）')) {
+      setPendingDeletes(prev => [...prev, id]);
+      
+      // Remove from UI lists
+      setPrimary(prev => prev.filter(pid => pid !== id));
+      setSecondary(prev => prev.filter(sid => sid !== id));
+
+      if (editCategory?.id === id) {
+        handleCancelEdit();
+      }
     }
   };
 
@@ -325,7 +338,7 @@ export const SettingsModal = ({ isOpen, onClose, uid, categories, initialPrimary
             {/* 1. Visibility Tab */}
             {activeTab === 'visibility' && (
                 <div className="space-y-2">
-                    {categories.map(cat => {
+                    {categories.filter(c => !pendingDeletes.includes(c.id)).map(cat => {
                         const isPrimary = primary.includes(cat.id);
                         const isSecondary = secondary.includes(cat.id);
                         const { color: rowColorClass } = getCategoryColor(cat);
@@ -583,7 +596,7 @@ export const SettingsModal = ({ isOpen, onClose, uid, categories, initialPrimary
                     <div className="space-y-4 pt-4 border-t">
                         <h3 className="font-bold text-gray-800">カテゴリ一覧</h3>
                         <div className="space-y-2">
-                            {categories.map((cat) => {
+                            {categories.filter(c => !pendingDeletes.includes(c.id)).map((cat) => {
                                 const isSystem = cat.type === 'SYSTEM';
                                 // Edit allowed if: (Admin) OR (Custom & User)
                                 const canEdit = !isSystem; 

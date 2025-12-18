@@ -8,6 +8,8 @@ interface WorkLog {
   id: number;
   categoryId: number;
   categoryNameSnapshot: string;
+  startTime: string;
+  endTime?: string | null;
 }
 
 interface EditLogModalProps {
@@ -24,7 +26,7 @@ export const EditLogModal = ({ isOpen, onClose, mode, log, categories, uid, init
   const queryClient = useQueryClient();
   const { showToast } = useToast();
   const [selectedCatId, setSelectedCatId] = useState<number | null>(null);
-  const [startTime, setStartTime] = useState<string>('');
+  const [startTimeStr, setStartTimeStr] = useState<string>(''); // HH:mm for create
 
   useEffect(() => {
     if (!isOpen) return;
@@ -40,19 +42,22 @@ export const EditLogModal = ({ isOpen, onClose, mode, log, categories, uid, init
       const pad = (n: number) => String(n).padStart(2, '0');
       const hh = pad(now.getHours());
       const mm = pad(now.getMinutes());
-      setStartTime(`${hh}:${mm}`);
+      setStartTimeStr(`${hh}:${mm}`);
     }
-  }, [isOpen, mode, log]);
+  }, [isOpen, mode, log, initialCategoryId]);
 
   const updateMutation = useMutation({
-    mutationFn: async (data: { categoryId: number }) => {
+    mutationFn: async (data: { categoryId: number; startTime?: string; endTime?: string | null }) => {
       if (!log) return;
       return api.patch(`/logs/${log.id}`, data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['history', uid] });
       queryClient.invalidateQueries({ queryKey: ['activeLog', uid] });
+      // Also invalidate monitor logs if we are in admin view (though uid might be different context, invalidating general helps)
+      queryClient.invalidateQueries({ queryKey: ['monitorLogs'] });
       onClose();
+      showToast('履歴を更新しました', 'success');
     },
     onError: (error: any) => {
       const msg = error.response?.data?.details || error.response?.data?.error || '履歴の更新に失敗しました';
@@ -68,6 +73,7 @@ export const EditLogModal = ({ isOpen, onClose, mode, log, categories, uid, init
       queryClient.invalidateQueries({ queryKey: ['history', uid] });
       queryClient.invalidateQueries({ queryKey: ['activeLog', uid] });
       onClose();
+      showToast('履歴を追加しました', 'success');
     },
     onError: (error: any) => {
       const status = error.response?.status;
@@ -86,12 +92,13 @@ export const EditLogModal = ({ isOpen, onClose, mode, log, categories, uid, init
     }
 
     if (mode === 'edit') {
-      updateMutation.mutate({ categoryId: selectedCatId });
+      const payload: any = { categoryId: selectedCatId };
+      updateMutation.mutate(payload);
       return;
     }
 
     const today = new Date();
-    const [sh, sm] = startTime.split(':').map(Number);
+    const [sh, sm] = startTimeStr.split(':').map(Number);
 
     if ([sh, sm].some(v => Number.isNaN(v))) {
       showToast('開始時刻を正しく入力してください', 'error');
@@ -111,24 +118,32 @@ export const EditLogModal = ({ isOpen, onClose, mode, log, categories, uid, init
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 w-full max-w-lg shadow-xl">
+      <div className="bg-white rounded-lg p-6 w-full max-w-lg shadow-xl overflow-y-auto max-h-[90vh]">
         <h2 className="text-xl font-bold mb-4">{mode === 'edit' ? '履歴の修正' : '履歴の追加'}</h2>
-        <p className="mb-4 text-gray-600">{mode === 'edit' ? '正しい作業内容を選択してください。' : '追加する作業内容と時間を入力してください。'}</p>
+        
+        {mode === 'edit' ? (
+            <div className="mb-4 space-y-3">
+                <p className="text-sm text-gray-600">作業内容を修正できます。</p>
+            </div>
+        ) : (
+            <p className="mb-4 text-gray-600">追加する作業内容と時間を入力してください。</p>
+        )}
 
         {mode === 'create' && (
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-600 mb-1">開始時刻</label>
             <input
               type="time"
-              value={startTime}
-              onChange={(e) => setStartTime(e.target.value)}
+              value={startTimeStr}
+              onChange={(e) => setStartTimeStr(e.target.value)}
               className="w-full p-2 border rounded-lg bg-white"
             />
             <p className="text-xs text-gray-500 mt-1">前の項目の開始時間との差が計算時間になります</p>
           </div>
         )}
         
-        <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto mb-6 p-1">
+        <label className="block text-xs font-bold text-gray-500 uppercase mb-2">カテゴリ選択</label>
+        <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto mb-6 p-1 border rounded bg-slate-50">
           {categories.map(cat => (
             <button
               key={cat.id}
@@ -136,7 +151,7 @@ export const EditLogModal = ({ isOpen, onClose, mode, log, categories, uid, init
               className={`p-3 rounded-lg border text-left transition-all ${
                   selectedCatId === cat.id 
                   ? 'ring-2 ring-blue-500 bg-blue-50 border-blue-500 font-bold' 
-                  : 'hover:bg-gray-50 border-gray-200'
+                  : 'hover:bg-white border-gray-200 bg-white'
               }`}
             >
               <span 
@@ -151,7 +166,7 @@ export const EditLogModal = ({ isOpen, onClose, mode, log, categories, uid, init
           <button onClick={onClose} className="px-4 py-2 border rounded-lg hover:bg-gray-50">キャンセル</button>
           <button 
             onClick={handleSave} 
-            disabled={!selectedCatId || (mode === 'create' && !startTime) || updateMutation.isPending || createMutation.isPending}
+            disabled={!selectedCatId || (mode === 'create' && !startTimeStr) || updateMutation.isPending || createMutation.isPending}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-bold shadow-sm"
           >
             {(updateMutation.isPending || createMutation.isPending) ? '保存中...' : '保存'}
