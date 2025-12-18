@@ -158,7 +158,7 @@ export const MonitorTable = ({ selectedUsers = [], timeRange = 'daily', customSt
         let statusStr = '-';
         if (status) {
             const dateShort = `${Number(m)}.${Number(d)}`;
-            if (status.isFixed) statusStr = `${dateShort} 未退社(補正済)`;
+            if (status.isFixed) statusStr = `${dateShort} 退社済(補正済)`;
             else if (status.hasLeft) statusStr = `${dateShort} 退社済`;
             else statusStr = `${dateShort} 未退社`;
         } else {
