@@ -302,7 +302,24 @@ function ZimmeterApp() {
           
           // Set state
           setHasLeftWork(true);
-          const date = res.data.date;
+          
+          // Fallback for date if server doesn't return it (e.g. stale server process)
+          let date = res.data.date;
+          if (!date) {
+            console.warn('Server did not return date, using client-side fallback');
+            const now = new Date();
+            // Simple check: if < 5 AM, treat as yesterday (matching server logic roughly)
+            if (now.getHours() < 5) {
+                const y = new Date();
+                y.setDate(y.getDate() - 1);
+                // Format YYYY-MM-DD
+                date = y.getFullYear() + '-' + String(y.getMonth() + 1).padStart(2, '0') + '-' + String(y.getDate()).padStart(2, '0');
+            } else {
+                date = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+            }
+          }
+          
+          console.log('Leave Work Date set to:', date);
           setLastLeaveDate(date);
 
           // Persist to localStorage
