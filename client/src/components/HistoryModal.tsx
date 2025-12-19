@@ -1,4 +1,5 @@
 import { X, Pencil, Plus } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import type { Category } from '../lib/constants';
 import { getCategoryStyle } from '../lib/utils';
 
@@ -41,11 +42,22 @@ export const HistoryModal = ({
 }: HistoryModalProps) => {
   if (!isOpen) return null;
 
+  const [nowMs, setNowMs] = useState(() => Date.now());
+
+  useEffect(() => {
+    const id = window.setInterval(() => setNowMs(Date.now()), 30_000);
+    return () => window.clearInterval(id);
+  }, []);
+
   const formatDuration = (seconds: number) => {
     const h = Math.floor(seconds / 3600);
     const m = Math.floor((seconds % 3600) / 60);
     const s = seconds % 60;
     return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
+
+  const formatTime = (timeString: string) => {
+    return new Date(timeString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
   const getLogTypeInfo = (log: WorkLog) => {
@@ -79,16 +91,74 @@ export const HistoryModal = ({
     };
   };
 
-    const todayLogs = logs.filter(log => {
-    // 時間が0の履歴（終了済みかつ時間が0）は表示しない
-    if (log.endTime && (log.duration || 0) === 0) return false;
+  const PIXELS_PER_MINUTE = 2;
+  const MIN_HEIGHT_PX = 40;
 
-    const logDate = new Date(log.startTime).toDateString();
-    const today = new Date().toDateString();
-    const isSameDay = logDate === today;
-    const matchesFilter = filterCategoryId ? log.categoryId === filterCategoryId : true;
-    return isSameDay && matchesFilter;
-  });
+  const getBlockHeight = (durationInSeconds: number) => {
+    const minutes = durationInSeconds / 60;
+    const height = minutes * PIXELS_PER_MINUTE;
+    return Math.max(height, MIN_HEIGHT_PX);
+  };
+
+  const getDurationSeconds = (log: WorkLog) => {
+    const startMs = new Date(log.startTime).getTime();
+    const endMs = log.endTime ? new Date(log.endTime).getTime() : nowMs;
+
+    if (log.endTime && typeof log.duration === 'number') return Math.max(0, log.duration);
+    return Math.max(0, Math.floor((endMs - startMs) / 1000));
+  };
+
+  const timelineItems = useMemo(() => {
+    const today = new Date(nowMs).toDateString();
+
+    const filtered = logs
+      .filter(log => {
+        if (log.endTime && (log.duration || 0) === 0) return false;
+
+        const logDate = new Date(log.startTime).toDateString();
+        const isSameDay = logDate === today;
+        const matchesFilter = filterCategoryId ? log.categoryId === filterCategoryId : true;
+        return isSameDay && matchesFilter;
+      })
+      .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+
+    const items: Array<
+      | { kind: 'task'; key: string; log: WorkLog; heightPx: number; durationSeconds: number }
+      | { kind: 'break'; key: string; startTime: string; durationSeconds: number; heightPx: number }
+    > = [];
+
+    for (let i = 0; i < filtered.length; i++) {
+      const log = filtered[i];
+      const durationSeconds = getDurationSeconds(log);
+
+      items.push({
+        kind: 'task',
+        key: `task-${log.id}`,
+        log,
+        durationSeconds,
+        heightPx: getBlockHeight(durationSeconds),
+      });
+
+      const next = filtered[i + 1];
+      if (!next) continue;
+      if (!log.endTime) continue;
+
+      const gapStartMs = new Date(log.endTime).getTime();
+      const gapEndMs = new Date(next.startTime).getTime();
+      const gapSeconds = Math.max(0, Math.floor((gapEndMs - gapStartMs) / 1000));
+      if (gapSeconds <= 0) continue;
+
+      items.push({
+        kind: 'break',
+        key: `break-${log.id}-${next.id}`,
+        startTime: log.endTime,
+        durationSeconds: gapSeconds,
+        heightPx: getBlockHeight(gapSeconds),
+      });
+    }
+
+    return items;
+  }, [filterCategoryId, logs, nowMs]);
 
   const filterCategory = filterCategoryId ? mergedCategories[filterCategoryId] : null;
 
@@ -128,73 +198,96 @@ export const HistoryModal = ({
         </div>
 
         <div className="overflow-y-auto flex-1">
-          <table className="w-full text-sm text-center">
-            <thead className="bg-gray-50 text-gray-500 sticky top-0 z-10">
-              <tr>
-                <th className="p-2 rounded-l text-center">開始時刻</th>
-                <th className="p-2 text-center">タスク</th>
-                <th className="p-2 text-center">時間</th>
-                <th className="p-2 text-center">タイプ</th>
-                <th className="p-2 rounded-r text-center">操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              {todayLogs.map(log => {
-                 const cat = mergedCategories[log.categoryId];
-                 const { className: colorClass, style } = getCategoryStyle(cat);
-                 
-                 return (
-                    <tr 
-                        key={log.id} 
-                        className="border-b last:border-0 hover:bg-gray-50 cursor-pointer transition-colors"
-                        onDoubleClick={() => onItemDoubleClick?.(log.categoryId)}
+          <div className="flex flex-col gap-1">
+            {timelineItems.map(item => {
+              if (item.kind === 'break') {
+                return (
+                  <div key={item.key} className="flex">
+                    <div className="w-20 shrink-0 pr-3 text-right font-mono text-xs text-gray-400 leading-none pt-1">
+                      {formatTime(item.startTime)}
+                    </div>
+                    <div className="flex-1">
+                      <div
+                        className="border-l-4 border-gray-200 bg-gray-50/60 rounded-sm px-3 flex items-center text-xs text-gray-500"
+                        style={{ height: `${item.heightPx}px` }}
+                      >
+                        Break ({formatDuration(item.durationSeconds)})
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+
+              const log = item.log;
+              const cat = mergedCategories[log.categoryId];
+              const { style } = getCategoryStyle(cat);
+              const typeInfo = getLogTypeInfo(log);
+              const isActive = !log.endTime;
+
+              return (
+                <div
+                  key={item.key}
+                  className="flex cursor-pointer"
+                  onDoubleClick={() => onItemDoubleClick?.(log.categoryId)}
+                >
+                  <div className="w-20 shrink-0 pr-3 text-right font-mono text-sm text-gray-500 leading-none pt-1">
+                    {formatTime(log.startTime)}
+                  </div>
+                  <div className="flex-1">
+                    <div
+                      className={`border-l-4 bg-gray-50 rounded-sm p-3 flex flex-col gap-2 ${isActive ? 'border-dashed' : ''}`}
+                      style={{
+                        height: `${item.heightPx}px`,
+                        borderLeftColor: style?.backgroundColor || undefined,
+                      }}
                     >
-                      <td className="p-2 font-mono text-gray-500 text-center">
-                        {new Date(log.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                      </td>
-                      <td className="p-2 font-medium">
-                        <div className="flex items-center justify-center">
-                            <span 
-                                className={`inline-block w-2 h-2 rounded-full mr-2 ${colorClass.split(' ')[0]}`}
-                                style={style?.backgroundColor ? { backgroundColor: style.backgroundColor } : {}}
-                            ></span>
-                            {log.categoryNameSnapshot}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="text-gray-700 font-semibold truncate">{log.categoryNameSnapshot}</div>
+                          <div className="font-mono text-xs text-gray-500">
+                            {isActive ? `進行中 (${formatDuration(item.durationSeconds)})` : formatDuration(item.durationSeconds)}
+                          </div>
                         </div>
-                      </td>
-                      <td className="p-2 text-gray-500 font-mono text-center">
-                        {log.endTime ? formatDuration(log.duration || 0) : '進行中'}
-                      </td>
-                      <td className="p-2 text-xs text-gray-400 text-center">
-                        <div className="flex flex-col items-center gap-0.5">
-                          <span className={`px-2 py-0.5 rounded-full whitespace-nowrap ${getLogTypeInfo(log).color}`}>
-                            {getLogTypeInfo(log).label}
-                          </span>
-                          {getLogTypeInfo(log).showTime && log.updatedAt && (
-                            <span className="text-[10px] text-gray-400">
-                              {new Date(log.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          {isActive && (
+                            <span className="inline-block px-2 py-0.5 text-[11px] rounded-full whitespace-nowrap bg-blue-100 text-blue-700">
+                              Active
                             </span>
                           )}
-                        </div>
-                      </td>
-                      <td className="p-2">
-                        <div className="flex gap-1 justify-center">
-                            <button
-                            onClick={() => onEdit(log)}
+                          <div className="flex flex-col items-end gap-1">
+                            <span className={`px-2 py-0.5 text-[11px] rounded-full whitespace-nowrap ${typeInfo.color}`}>
+                              {typeInfo.label}
+                            </span>
+                            {typeInfo.showTime && log.updatedAt && (
+                              <span className="text-[10px] text-gray-400 font-mono">
+                                {new Date(log.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            )}
+                          </div>
+                          <button
+                            onClick={e => {
+                              e.stopPropagation();
+                              onEdit(log);
+                            }}
                             className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
                             title="修正"
-                            >
+                            type="button"
+                          >
                             <Pencil size={16} />
-                            </button>
+                          </button>
                         </div>
-                      </td>
-                    </tr>
-                 );
-              })}
-              {todayLogs.length === 0 && (
-                <tr><td colSpan={5} className="p-4 text-center text-gray-400">履歴なし</td></tr>
-              )}
-            </tbody>
-          </table>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+
+            {timelineItems.length === 0 && (
+              <div className="p-4 text-center text-gray-400">履歴なし</div>
+            )}
+          </div>
         </div>
       </div>
     </div>
