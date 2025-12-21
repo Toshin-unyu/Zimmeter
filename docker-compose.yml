@@ -32,8 +32,10 @@ services:
     container_name: zimmeter-client
     ports:
       - "9002:9002"
+    depends_on:
+      - server
     environment:
-      - VITE_API_TARGET=http://host.docker.internal:9102
+      - VITE_API_TARGET=http://server:9102
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
