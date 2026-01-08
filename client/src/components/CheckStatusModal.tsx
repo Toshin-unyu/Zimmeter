@@ -117,10 +117,10 @@ export const CheckStatusModal = ({ isOpen, onClose, statusData, uid }: CheckStat
                             対象日の記録を「完了」として補正しますか？
                         </p>
 
-                        <div className="flex gap-3 w-full">
+                        <div className="flex gap-3 w-full justify-end">
                             <button
                             type="button"
-                            className="flex-1 inline-flex justify-center items-center gap-2 rounded-lg border border-transparent bg-orange-600 px-4 py-3 text-sm font-bold text-white hover:bg-orange-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2 transition-colors touch-manipulation"
+                            className="btn-primary bg-orange-600 hover:bg-orange-700 border-orange-600"
                             onClick={handleStartFix}
                             >
                             <span>手動補正へ進む</span>
@@ -155,10 +155,10 @@ export const CheckStatusModal = ({ isOpen, onClose, statusData, uid }: CheckStat
                             )}
                         </div>
 
-                        <div className="flex gap-3 w-full mt-8">
+                        <div className="flex gap-3 w-full justify-end mt-8">
                             <button
                                 type="button"
-                                className="flex-1 inline-flex justify-center items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none transition-colors touch-manipulation"
+                                className="btn-secondary"
                                 onClick={() => setIsInputMode(false)}
                             >
                                 <RotateCcw size={18} />
@@ -166,7 +166,7 @@ export const CheckStatusModal = ({ isOpen, onClose, statusData, uid }: CheckStat
                             </button>
                             <button
                                 type="button"
-                                className="flex-1 inline-flex justify-center items-center gap-2 rounded-lg border border-transparent bg-orange-600 px-4 py-3 text-sm font-bold text-white hover:bg-orange-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation"
+                                className="btn-primary bg-orange-600 hover:bg-orange-700 border-orange-600 disabled:opacity-50"
                                 onClick={() => fixMutation.mutate()}
                                 disabled={!leaveTime || fixMutation.isPending}
                             >

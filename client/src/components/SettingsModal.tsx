@@ -630,10 +630,10 @@ export const SettingsModal = ({ isOpen, onClose, uid, categories, initialPrimary
         </div>
 
         <div className="mt-6 flex justify-end gap-2 sticky bottom-0 bg-white pt-2 border-t shrink-0">
-            <button onClick={onClose} className="px-4 py-2 border rounded-lg hover:bg-gray-50">キャンセル</button>
+            <button onClick={onClose} className="btn-secondary">キャンセル</button>
             <button 
                 onClick={handleSaveSettings} 
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                className="btn-primary disabled:opacity-50"
                 disabled={settingsMutation.isPending || reorderMutation.isPending}
             >
                 {settingsMutation.isPending || reorderMutation.isPending ? '保存中...' : '設定を保存'}

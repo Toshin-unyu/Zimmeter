@@ -51,7 +51,7 @@ export const LoginModal = ({ isOpen, onSubmit }: LoginModalProps) => {
             <button 
                 type="submit"
                 disabled={!username.trim()}
-                className="w-full py-4 bg-blue-600 text-white text-lg font-bold rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg hover:shadow-blue-200 hover:-translate-y-0.5"
+                className="btn-primary w-full py-4 text-lg disabled:opacity-50 shadow-lg"
             >
                 開始する
             </button>

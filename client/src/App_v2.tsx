@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { QueryClient, QueryClientProvider, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Settings, Download, History, AlertCircle, Pencil, Square, LogOut, RotateCcw } from 'lucide-react';
+import { Settings, Download, History, AlertCircle, Pencil, Square, LogOut, RotateCcw, User, Bell } from 'lucide-react';
 import { getCategoryColor } from './lib/constants';
 import type { Category } from './lib/constants';
 import { api } from './lib/axios';
@@ -432,26 +432,35 @@ function ZimmeterApp() {
   const showLeaveOverlay = hasLeftWork && (userStatus?.role !== 'ADMIN' || activeTab === 'main');
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 text-gray-800 font-sans">
+    <div className="min-h-screen bg-[#F4F6F8] text-gray-800 font-sans">
         <StatusGuard />
         {/* Header */}
-        <header className={`bg-white shadow px-4 lg:px-6 h-16 flex justify-between items-center sticky top-0 ${headerZIndex} whitespace-nowrap`}>
+        <header className={`bg-[#0056B3] shadow px-4 lg:px-6 h-16 flex justify-between items-center sticky top-0 ${headerZIndex} whitespace-nowrap text-white`}>
             <div className="flex items-center gap-2 lg:gap-8 overflow-hidden">
-                <div className="flex items-center gap-2 lg:gap-4 shrink-0">
-                    <h1 className="text-xl lg:text-2xl font-bold tracking-tight text-gray-700 hidden sm:block">Zimmeter</h1>
-                    <div className="flex items-center gap-2 px-3 py-1 bg-gray-100 rounded-full text-sm text-gray-500">
-                        <span className="truncate max-w-[100px] sm:max-w-none">{uid}</span>
+                <div className="flex items-center gap-3 shrink-0">
+                    {/* Branding: [Icon] | [Name] */}
+                    <div className="flex items-center gap-3">
+                        <div className="bg-white/15 p-2 rounded-md flex items-center justify-center w-10 h-10">
+                            {/* T-Shield Icon */}
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6 text-white">
+                                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                                <path d="M9 9h6"></path>
+                                <path d="M12 9v8"></path>
+                            </svg>
+                        </div>
+                        <div className="h-6 w-px bg-white/30"></div>
+                        <h1 className="text-xl font-bold tracking-tight text-white hidden sm:block">Zimmeter</h1>
                     </div>
                 </div>
 
                 {/* Tabs */}
-                <div className="flex space-x-1 bg-gray-100 p-1 rounded-lg shrink-0">
+                <div className="flex space-x-1 bg-black/20 p-1 rounded-md shrink-0">
                     <button
                         onClick={() => setActiveTab('main')}
-                        className={`px-3 lg:px-4 py-1.5 rounded-md text-xs lg:text-sm font-medium transition-colors ${
+                        className={`px-3 lg:px-4 py-1.5 rounded text-xs lg:text-sm font-medium transition-colors ${
                             activeTab === 'main' 
-                                ? 'bg-white text-gray-800 shadow-sm' 
-                                : 'text-gray-500 hover:text-gray-700'
+                                ? 'bg-white text-[#0056B3] shadow-sm' 
+                                : 'text-white/70 hover:text-white'
                         }`}
                     >
                         メイン
@@ -459,10 +468,10 @@ function ZimmeterApp() {
                     {userStatus?.role === 'ADMIN' && (
                         <button
                             onClick={() => setActiveTab('admin')}
-                            className={`px-3 lg:px-4 py-1.5 rounded-md text-xs lg:text-sm font-medium transition-colors ${
+                            className={`px-3 lg:px-4 py-1.5 rounded text-xs lg:text-sm font-medium transition-colors ${
                                 activeTab === 'admin' 
-                                    ? 'bg-white text-gray-800 shadow-sm' 
-                                    : 'text-gray-500 hover:text-gray-700'
+                                    ? 'bg-white text-[#0056B3] shadow-sm' 
+                                    : 'text-white/70 hover:text-white'
                             }`}
                         >
                             管理画面
@@ -471,39 +480,75 @@ function ZimmeterApp() {
                 </div>
             </div>
             
-            <div className="flex gap-1 lg:gap-2 shrink-0">
-                <button 
-                    onClick={() => setShowHistory(!showHistory)}
-                    className={`p-2 rounded-lg hover:bg-gray-100 transition-colors ${showHistory ? 'bg-blue-50 text-blue-600' : 'text-gray-500'}`}
-                    title="履歴"
-                >
-                    <History size={20} />
-                </button>
-                <a 
-                    href={`${api.defaults.baseURL}/export/csv?uid=${uid}`} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors"
-                    title="CSVエクスポート"
-                >
-                    <Download size={20} />
-                </a>
-                <button 
-                    onClick={() => setIsSettingsOpen(true)}
-                    className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors"
-                    title="設定"
-                >
-                    <Settings size={20} />
-                </button>
-                
-                <button 
-                    onClick={handleLeaveWork}
-                    className="flex items-center gap-2 px-3 lg:px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg transition-all shadow-md hover:shadow-lg font-bold ml-2"
-                    title="退社する"
-                >
-                    <LogOut size={18} />
-                    <span className="hidden sm:inline">退社</span>
-                </button>
+            <div className="flex gap-1 lg:gap-2 shrink-0 items-center">
+                {/* App Specific Actions */}
+                <div className="flex gap-1 mr-2 border-r border-white/20 pr-2">
+                    <button 
+                        onClick={() => setShowHistory(!showHistory)}
+                        className={`p-2 rounded-md hover:bg-white/10 transition-colors ${showHistory ? 'bg-white text-[#0056B3]' : 'text-white/80'}`}
+                        title="履歴"
+                    >
+                        <History size={20} />
+                    </button>
+                    <a 
+                        href={`${api.defaults.baseURL}/export/csv?uid=${uid}`} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="p-2 text-white/80 hover:bg-white/10 rounded-md transition-colors"
+                        title="CSVエクスポート"
+                    >
+                        <Download size={20} />
+                    </a>
+                    
+                    <button 
+                        onClick={handleLeaveWork}
+                        className="flex items-center gap-2 px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-md transition-all shadow-sm hover:shadow-md font-bold ml-1 border border-orange-600"
+                        title="退社する"
+                    >
+                        <LogOut size={18} />
+                        <span className="hidden lg:inline text-sm">退社</span>
+                    </button>
+                </div>
+
+                {/* Common Toolbar: [Avatar] [Settings] [Bell] [Logout] */}
+                <div className="flex items-center gap-1">
+                    {/* Avatar */}
+                    <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center border border-white/30 cursor-help text-white" title={`ID: ${uid}`}>
+                        <User size={18} />
+                    </div>
+
+                    {/* Settings */}
+                    <button 
+                        onClick={() => setIsSettingsOpen(true)}
+                        className="p-2 text-white/80 hover:bg-white/10 rounded-full transition-colors"
+                        title="設定"
+                    >
+                        <Settings size={20} />
+                    </button>
+
+                    {/* Notifications (Placeholder) */}
+                    <button 
+                        className="p-2 text-white/80 hover:bg-white/10 rounded-full transition-colors"
+                        title="通知"
+                    >
+                        <Bell size={20} />
+                    </button>
+
+                    {/* Logout (Reset ID) */}
+                    <button 
+                        onClick={() => {
+                            if(window.confirm('ログアウトしますか？')) {
+                                localStorage.removeItem('zimmeter_uid');
+                                setUid('');
+                                setShowLoginModal(true);
+                            }
+                        }}
+                        className="p-2 text-white/80 hover:bg-white/10 rounded-full transition-colors"
+                        title="ログアウト"
+                    >
+                        <LogOut size={20} />
+                    </button>
+                </div>
             </div>
         </header>
 

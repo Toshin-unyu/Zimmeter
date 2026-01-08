@@ -50,10 +50,10 @@ export const LeaveConfirmModal = ({ isOpen, onClose, onConfirm }: LeaveConfirmMo
                     この操作は後から修正可能です。
                   </p>
 
-                  <div className="flex gap-3 w-full">
+                  <div className="flex gap-3 w-full justify-end">
                     <button
                       type="button"
-                      className="flex-1 inline-flex justify-center items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 transition-colors"
+                      className="btn-secondary"
                       onClick={onClose}
                     >
                       <X size={18} />
@@ -61,7 +61,7 @@ export const LeaveConfirmModal = ({ isOpen, onClose, onConfirm }: LeaveConfirmMo
                     </button>
                     <button
                       type="button"
-                      className="flex-1 inline-flex justify-center items-center gap-2 rounded-lg border border-transparent bg-orange-600 px-4 py-3 text-sm font-bold text-white hover:bg-orange-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2 transition-colors shadow-lg hover:shadow-xl"
+                      className="btn-primary bg-orange-600 hover:bg-orange-700 border-orange-600"
                       onClick={() => {
                         onConfirm();
                         onClose();

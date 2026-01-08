@@ -33,3 +33,87 @@
 .overflow-x-auto::-webkit-scrollbar-corner {
   background: transparent;
 }
+
+/* T-Series Input Standardization */
+input[type="text"], 
+input[type="email"], 
+input[type="password"], 
+input[type="number"],
+textarea, 
+select {
+  border-radius: 4px !important;
+  border: 1px solid #CED4DA !important;
+  padding: 0.5rem 0.75rem !important;
+  outline: none !important;
+  transition: all 0.2s ease-in-out;
+  box-shadow: none !important;
+}
+
+input:focus, 
+textarea:focus, 
+select:focus {
+  border-color: #0056B3 !important;
+  box-shadow: 0 0 0 3px rgba(0, 86, 179, 0.15) !important;
+}
+
+label {
+  font-weight: 700 !important;
+  color: #374151;
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+/* Required Asterisk */
+label:has(+ input:required)::after,
+label:has(+ div > input:required)::after {
+  content: " *";
+  color: #DC3545;
+  margin-left: 2px;
+}
+
+/* T-Series Button Standardization */
+.btn-primary {
+  background-color: #0056B3 !important;
+  color: white !important;
+  padding: 0.5rem 1rem;
+  font-weight: 600;
+  border-radius: 4px !important;
+  border: 1px solid transparent;
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.btn-primary:hover {
+  background-color: #004494 !important;
+}
+
+.btn-secondary {
+  background-color: white !important;
+  color: #0056B3 !important;
+  border: 1px solid #0056B3 !important;
+  padding: 0.5rem 1rem;
+  font-weight: 600;
+  border-radius: 4px !important;
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.btn-secondary:hover {
+  background-color: #f0f7ff !important;
+}
+
+.btn-text {
+  background-color: transparent !important;
+  color: #4b5563 !important; /* Gray-600 */
+  padding: 0.5rem 1rem;
+  font-weight: 500;
+  border: none !important;
+  border-radius: 4px !important;
+  transition: all 0.2s;
+}
+.btn-text:hover {
+  background-color: rgba(0,0,0,0.05) !important;
+  color: #0056B3 !important;
+}

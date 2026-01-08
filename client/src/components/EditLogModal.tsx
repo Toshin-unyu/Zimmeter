@@ -162,12 +162,12 @@ export const EditLogModal = ({ isOpen, onClose, mode, log, categories, uid, init
           ))}
         </div>
 
-        <div className="flex justify-end gap-2">
-          <button onClick={onClose} className="px-4 py-2 border rounded-lg hover:bg-gray-50">キャンセル</button>
+        <div className="flex justify-end gap-2 mt-6">
+          <button onClick={onClose} className="btn-secondary">キャンセル</button>
           <button 
             onClick={handleSave} 
             disabled={!selectedCatId || (mode === 'create' && !startTimeStr) || updateMutation.isPending || createMutation.isPending}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-bold shadow-sm"
+            className="btn-primary disabled:opacity-50"
           >
             {(updateMutation.isPending || createMutation.isPending) ? '保存中...' : '保存'}
           </button>
