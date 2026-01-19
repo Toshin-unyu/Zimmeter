@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { QueryClient, QueryClientProvider, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Settings, Download, History, AlertCircle, Pencil, Square, LogOut, RotateCcw, User, Bell } from 'lucide-react';
+import { Settings, Download, History, AlertCircle, Pencil, Square, LogOut, RotateCcw, User } from 'lucide-react';
 import { getCategoryColor } from './lib/constants';
 import type { Category } from './lib/constants';
 import { api } from './lib/axios';
@@ -526,13 +526,6 @@ function ZimmeterApp() {
                         <Settings size={20} />
                     </button>
 
-                    {/* Notifications (Placeholder) */}
-                    <button 
-                        className="p-2 text-white/80 hover:bg-white/10 rounded-full transition-colors"
-                        title="通知"
-                    >
-                        <Bell size={20} />
-                    </button>
 
                     {/* Logout (Reset ID) */}
                     <button 

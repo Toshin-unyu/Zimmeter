@@ -42,18 +42,18 @@ export const AdminPage = ({ onBack }: AdminPageProps) => {
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans">
-      <header className="bg-slate-900 text-white shadow-lg px-4 lg:px-6 h-16 flex items-center sticky top-0 z-20 whitespace-nowrap">
+      <header className="t-header shadow-sm h-16 flex items-center whitespace-nowrap px-4 lg:px-6">
         <div className="flex justify-between items-center container mx-auto h-full">
           <div className="flex items-center gap-4 shrink-0">
             <button 
               onClick={onBack}
-              className="p-2 hover:bg-slate-800 rounded-lg transition-colors text-slate-300 hover:text-white"
+              className="t-header-icon"
               title="戻る"
             >
               <ArrowLeft size={20} />
             </button>
-            <h1 className="text-lg lg:text-xl font-bold tracking-tight flex items-center gap-2">
-              <LayoutDashboard className="text-blue-400" size={20} />
+            <h1 className="t-header-title tracking-tight">
+              <LayoutDashboard className="text-sky-500" size={20} />
               Zimmeter Admin
             </h1>
           </div>
