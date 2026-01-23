@@ -66,7 +66,9 @@ function ZimmeterApp() {
   const [initialAddCategoryId, setInitialAddCategoryId] = useState<number | null>(null);
   const [hasLeftWork, setHasLeftWork] = useState(false);
   const [historyFilterCategoryId, setHistoryFilterCategoryId] = useState<number | null>(null);
-  
+  const [showUserCard, setShowUserCard] = useState(false);
+  const userCardRef = useRef<HTMLDivElement>(null);
+
   // Undo Leave State
   const [isLeaveConfirmOpen, setIsLeaveConfirmOpen] = useState(false);
 
@@ -79,6 +81,21 @@ function ZimmeterApp() {
   useEffect(() => {
     // No timer cleanup needed anymore
   }, []);
+
+  // Close user card when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (userCardRef.current && !userCardRef.current.contains(event.target as Node)) {
+        setShowUserCard(false);
+      }
+    };
+    if (showUserCard) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showUserCard]);
 
   // Monitor User Info Changes
   useEffect(() => {
@@ -512,9 +529,39 @@ function ZimmeterApp() {
 
                 {/* Common Toolbar: [Avatar] [Settings] [Bell] [Logout] */}
                 <div className="flex items-center gap-1">
-                    {/* Avatar */}
-                    <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center border border-white/30 cursor-help text-white" title={`ID: ${uid}`}>
-                        <User size={18} />
+                    {/* Avatar with User Card */}
+                    <div className="relative" ref={userCardRef}>
+                        <button
+                            onClick={() => setShowUserCard(!showUserCard)}
+                            className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center border border-white/30 hover:bg-white/30 transition-colors text-white"
+                            title="ユーザー情報"
+                        >
+                            <User size={18} />
+                        </button>
+
+                        {/* User Info Card */}
+                        {showUserCard && (
+                            <div className="absolute right-0 top-10 bg-white rounded-lg shadow-xl border border-gray-200 p-4 min-w-[200px] z-50">
+                                <div className="space-y-3">
+                                    <div>
+                                        <p className="text-xs text-gray-400 uppercase tracking-wider">UID / Name</p>
+                                        <p className="text-sm font-medium text-gray-800">{uid}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-xs text-gray-400 uppercase tracking-wider">Role</p>
+                                        <p className="text-sm font-medium text-gray-800">
+                                            {userStatus?.role === 'ADMIN' ? 'ADMIN' : 'USER'}
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <p className="text-xs text-gray-400 uppercase tracking-wider">Status</p>
+                                        <p className={`text-sm font-medium ${hasLeftWork ? 'text-gray-500' : activeLogQuery.data ? 'text-green-600' : 'text-yellow-600'}`}>
+                                            {hasLeftWork ? '退社済み' : activeLogQuery.data ? '業務中' : '待機中'}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     {/* Settings */}
