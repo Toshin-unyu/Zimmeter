@@ -1281,7 +1281,7 @@ router.get('/logs/stats', async (req: Request, res: Response) => {
     }
 
     const modeStr = String(mode);
-    if (!['day', 'week', 'month', 'year', 'custom'].includes(modeStr)) {
+    if (!['hour', 'day', 'week', 'month', 'year', 'custom'].includes(modeStr)) {
       return res.status(400).json({ error: 'Invalid mode' });
     }
 
@@ -1297,62 +1297,145 @@ router.get('/logs/stats', async (req: Request, res: Response) => {
        return res.status(400).json({ error: 'No valid user IDs provided' });
     }
 
-    let rangeStart = new Date();
-    let rangeEnd = new Date(); // Default to now
-    let bucketCount = 0;
-    let bucketMode = modeStr; // Internal mode for bucketing logic
+    // ===== JST タイムゾーン処理ヘルパー =====
+    const JST_OFFSET = 9 * 60 * 60 * 1000; // 9時間 (ミリ秒)
 
-    if (modeStr === 'custom') {
+    // UTC時刻をJST日付文字列 (YYYY-MM-DD) に変換
+    const toJSTDateStr = (utcDate: Date): string => {
+      const jst = new Date(utcDate.getTime() + JST_OFFSET);
+      return jst.toISOString().slice(0, 10);
+    };
+
+    // JST日付文字列 (YYYY-MM-DD) をUTC時刻 (その日のJST 00:00:00) に変換
+    const jstDateToUTCStart = (dateStr: string): Date => {
+      const [year, month, day] = dateStr.split('-').map(Number);
+      // JST 00:00:00 = UTC 前日 15:00:00
+      return new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0) - JST_OFFSET);
+    };
+
+    // JST日付文字列 (YYYY-MM-DD) をUTC時刻 (その日のJST 23:59:59.999) に変換
+    const jstDateToUTCEnd = (dateStr: string): Date => {
+      const [year, month, day] = dateStr.split('-').map(Number);
+      // JST 23:59:59.999 = UTC 当日 14:59:59.999
+      return new Date(Date.UTC(year, month - 1, day, 23, 59, 59, 999) - JST_OFFSET);
+    };
+
+    // UTC時刻からJST年月を取得
+    const getJSTYearMonth = (utcDate: Date): { year: number; month: number } => {
+      const jst = new Date(utcDate.getTime() + JST_OFFSET);
+      return { year: jst.getUTCFullYear(), month: jst.getUTCMonth() };
+    };
+
+    // UTC時刻からJST年を取得
+    const getJSTYear = (utcDate: Date): number => {
+      const jst = new Date(utcDate.getTime() + JST_OFFSET);
+      return jst.getUTCFullYear();
+    };
+
+    // 現在のJST日付情報
+    const nowUTC = new Date();
+    const nowJST = new Date(nowUTC.getTime() + JST_OFFSET);
+    const todayJSTStr = nowJST.toISOString().slice(0, 10);
+
+    let rangeStartUTC: Date;
+    let rangeEndUTC: Date;
+    let bucketCount = 0;
+    let bucketMode = modeStr;
+    let rangeStartJSTStr: string;
+    let rangeEndJSTStr: string;
+    let rangeStartHour: number = 0; // hour モード用
+
+    if (modeStr === 'hour') {
+      // 直近24時間（時間単位）
+      // 現在のJST時刻から23時間前を開始点とする
+      const startHourJST = new Date(nowJST);
+      startHourJST.setUTCMinutes(0, 0, 0);
+      startHourJST.setUTCHours(startHourJST.getUTCHours() - 23);
+
+      rangeStartUTC = new Date(startHourJST.getTime() - JST_OFFSET);
+      rangeEndUTC = nowUTC;
+      rangeStartJSTStr = startHourJST.toISOString().slice(0, 10);
+      rangeEndJSTStr = todayJSTStr;
+      rangeStartHour = startHourJST.getUTCHours();
+      bucketCount = 24;
+      bucketMode = 'hour';
+
+    } else if (modeStr === 'custom') {
       if (!start || !end) {
         return res.status(400).json({ error: 'Missing start or end date for custom mode' });
       }
-      rangeStart = new Date(String(start));
-      rangeStart.setHours(0, 0, 0, 0);
-      
-      rangeEnd = new Date(String(end));
-      rangeEnd.setHours(23, 59, 59, 999);
+      rangeStartJSTStr = String(start);
+      rangeEndJSTStr = String(end);
+      rangeStartUTC = jstDateToUTCStart(rangeStartJSTStr);
+      rangeEndUTC = jstDateToUTCEnd(rangeEndJSTStr);
 
-      const diffTime = Math.abs(rangeEnd.getTime() - rangeStart.getTime());
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      // 日数計算
+      const startDate = new Date(rangeStartJSTStr);
+      const endDate = new Date(rangeEndJSTStr);
+      const diffDays = Math.round((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
       if (diffDays <= 31) {
         bucketMode = 'day';
-        bucketCount = diffDays + 1; // Include end date
-      } else if (diffDays <= 366) { // Up to 1 year
+        bucketCount = diffDays;
+      } else if (diffDays <= 366) {
         bucketMode = 'month';
-        // Adjust rangeStart to beginning of month for cleaner buckets if needed, or just keep custom start
-        // Ideally align buckets to start date
-        const months = (rangeEnd.getFullYear() - rangeStart.getFullYear()) * 12 + (rangeEnd.getMonth() - rangeStart.getMonth());
-        bucketCount = months + 1;
+        const startYear = startDate.getFullYear();
+        const startMonth = startDate.getMonth();
+        const endYear = endDate.getFullYear();
+        const endMonth = endDate.getMonth();
+        bucketCount = (endYear - startYear) * 12 + (endMonth - startMonth) + 1;
       } else {
         bucketMode = 'year';
-        const years = rangeEnd.getFullYear() - rangeStart.getFullYear();
-        bucketCount = years + 1;
+        bucketCount = endDate.getFullYear() - startDate.getFullYear() + 1;
       }
 
     } else if (modeStr === 'day') {
       // 直近30日
-      rangeStart.setDate(rangeStart.getDate() - 29);
-      rangeStart.setHours(0, 0, 0, 0);
+      const startDate = new Date(nowJST);
+      startDate.setUTCDate(startDate.getUTCDate() - 29);
+      rangeStartJSTStr = startDate.toISOString().slice(0, 10);
+      rangeEndJSTStr = todayJSTStr;
+      rangeStartUTC = jstDateToUTCStart(rangeStartJSTStr);
+      rangeEndUTC = jstDateToUTCEnd(rangeEndJSTStr);
       bucketCount = 30;
       bucketMode = 'day';
+
     } else if (modeStr === 'week') {
-      // 直近12週
-      const day = rangeStart.getDay();
-      const diffToMonday = (day + 6) % 7; 
-      rangeStart.setDate(rangeStart.getDate() - diffToMonday);
-      rangeStart.setHours(0, 0, 0, 0);
-      rangeStart.setDate(rangeStart.getDate() - 7 * 11);
+      // 直近12週（今週を含む）
+      const jstDay = nowJST.getUTCDay();
+      const diffToMonday = (jstDay + 6) % 7;
+      const thisMonday = new Date(nowJST);
+      thisMonday.setUTCDate(thisMonday.getUTCDate() - diffToMonday);
+      const startMonday = new Date(thisMonday);
+      startMonday.setUTCDate(startMonday.getUTCDate() - 7 * 11);
+
+      rangeStartJSTStr = startMonday.toISOString().slice(0, 10);
+      rangeEndJSTStr = todayJSTStr;
+      rangeStartUTC = jstDateToUTCStart(rangeStartJSTStr);
+      rangeEndUTC = jstDateToUTCEnd(rangeEndJSTStr);
       bucketCount = 12;
       bucketMode = 'week';
+
     } else if (modeStr === 'month') {
-      // month: 直近12ヶ月
-      rangeStart = new Date(rangeStart.getFullYear(), rangeStart.getMonth() - 11, 1, 0, 0, 0, 0);
+      // 直近12ヶ月
+      const startYear = nowJST.getUTCMonth() < 11
+        ? nowJST.getUTCFullYear() - 1
+        : nowJST.getUTCFullYear();
+      const startMonth = (nowJST.getUTCMonth() + 1) % 12; // 12ヶ月前の月
+      rangeStartJSTStr = `${startYear}-${String(startMonth + 1).padStart(2, '0')}-01`;
+      rangeEndJSTStr = todayJSTStr;
+      rangeStartUTC = jstDateToUTCStart(rangeStartJSTStr);
+      rangeEndUTC = jstDateToUTCEnd(rangeEndJSTStr);
       bucketCount = 12;
       bucketMode = 'month';
+
     } else {
       // year: 直近5年
-      rangeStart = new Date(rangeStart.getFullYear() - 4, 0, 1, 0, 0, 0, 0);
+      const startYear = nowJST.getUTCFullYear() - 4;
+      rangeStartJSTStr = `${startYear}-01-01`;
+      rangeEndJSTStr = todayJSTStr;
+      rangeStartUTC = jstDateToUTCStart(rangeStartJSTStr);
+      rangeEndUTC = jstDateToUTCEnd(rangeEndJSTStr);
       bucketCount = 5;
       bucketMode = 'year';
     }
@@ -1362,8 +1445,8 @@ router.get('/logs/stats', async (req: Request, res: Response) => {
       where: {
         userId: { in: targetIds },
         startTime: {
-          gte: rangeStart,
-          lte: rangeEnd,
+          gte: rangeStartUTC,
+          lte: rangeEndUTC,
         },
       },
       orderBy: { startTime: 'asc' },
@@ -1373,33 +1456,43 @@ router.get('/logs/stats', async (req: Request, res: Response) => {
     type Bucket = { label: string; totalSeconds: number };
     const buckets: Bucket[] = [];
 
-    if (bucketMode === 'day') {
+    if (bucketMode === 'hour') {
+      // 時間単位のバケット (00, 01, 02, ... 23)
       for (let i = 0; i < bucketCount; i++) {
-        const d = new Date(rangeStart);
-        d.setDate(rangeStart.getDate() + i);
+        const hour = (rangeStartHour + i) % 24;
+        const label = String(hour).padStart(2, '0');
+        buckets.push({ label, totalSeconds: 0 });
+      }
+    } else if (bucketMode === 'day') {
+      const startDate = new Date(rangeStartJSTStr);
+      for (let i = 0; i < bucketCount; i++) {
+        const d = new Date(startDate);
+        d.setDate(startDate.getDate() + i);
         const label = d.toISOString().slice(0, 10); // YYYY-MM-DD
         buckets.push({ label, totalSeconds: 0 });
       }
     } else if (bucketMode === 'week') {
+      const startDate = new Date(rangeStartJSTStr);
       for (let i = 0; i < bucketCount; i++) {
-        const d = new Date(rangeStart);
-        d.setDate(rangeStart.getDate() + i * 7);
-        const year = d.getFullYear();
-        const weekIndex = i + 1; 
-        const label = `${year}-W${String(weekIndex).padStart(2, '0')}`;
+        const d = new Date(startDate);
+        d.setDate(startDate.getDate() + i * 7);
+        const label = d.toISOString().slice(0, 10); // 週の開始日をラベルに
         buckets.push({ label, totalSeconds: 0 });
       }
     } else if (bucketMode === 'month') {
+      const [startYear, startMonth] = rangeStartJSTStr.split('-').map(Number);
       for (let i = 0; i < bucketCount; i++) {
-        const d = new Date(rangeStart.getFullYear(), rangeStart.getMonth() + i, 1);
-        const label = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        const m = startMonth - 1 + i;
+        const year = startYear + Math.floor(m / 12);
+        const month = (m % 12) + 1;
+        const label = `${year}-${String(month).padStart(2, '0')}`;
         buckets.push({ label, totalSeconds: 0 });
       }
     } else {
       // year
+      const startYear = parseInt(rangeStartJSTStr.slice(0, 4));
       for (let i = 0; i < bucketCount; i++) {
-        const year = rangeStart.getFullYear() + i;
-        const label = `${year}`;
+        const label = `${startYear + i}`;
         buckets.push({ label, totalSeconds: 0 });
       }
     }
@@ -1407,37 +1500,54 @@ router.get('/logs/stats', async (req: Request, res: Response) => {
     const byCategory: Record<string, number> = {};
 
     for (const log of logs) {
-      const start = log.startTime;
+      const logStartUTC = log.startTime;
       const durationSec = log.duration ?? (log.endTime ? Math.floor((log.endTime.getTime() - log.startTime.getTime()) / 1000) : 0);
       if (!durationSec) continue;
 
       let bucketIndex = -1;
 
-      if (bucketMode === 'day') {
-        const diffDays = Math.floor((start.getTime() - rangeStart.getTime()) / (1000 * 60 * 60 * 24));
+      if (bucketMode === 'hour') {
+        // ログのJST時刻を取得してバケットインデックスを計算
+        const logJST = new Date(logStartUTC.getTime() + JST_OFFSET);
+        const logHour = logJST.getUTCHours();
+        // rangeStartHour からの差分を計算
+        let diffHours = logHour - rangeStartHour;
+        if (diffHours < 0) diffHours += 24;
+        // 日付も考慮（24時間以内かどうか）
+        const hoursSinceStart = Math.floor((logStartUTC.getTime() - rangeStartUTC.getTime()) / (1000 * 60 * 60));
+        if (hoursSinceStart >= 0 && hoursSinceStart < bucketCount) {
+          bucketIndex = hoursSinceStart;
+        }
+      } else if (bucketMode === 'day') {
+        // ログのJST日付を取得してバケットインデックスを計算
+        const logJSTDateStr = toJSTDateStr(logStartUTC);
+        const logDate = new Date(logJSTDateStr);
+        const startDate = new Date(rangeStartJSTStr);
+        const diffDays = Math.round((logDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
         if (diffDays >= 0 && diffDays < bucketCount) {
           bucketIndex = diffDays;
         }
       } else if (bucketMode === 'week') {
-        const diffDays = Math.floor((start.getTime() - rangeStart.getTime()) / (1000 * 60 * 60 * 24));
+        const logJSTDateStr = toJSTDateStr(logStartUTC);
+        const logDate = new Date(logJSTDateStr);
+        const startDate = new Date(rangeStartJSTStr);
+        const diffDays = Math.round((logDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
         const diffWeeks = Math.floor(diffDays / 7);
         if (diffWeeks >= 0 && diffWeeks < bucketCount) {
           bucketIndex = diffWeeks;
         }
       } else if (bucketMode === 'month') {
-        const year = start.getFullYear();
-        const month = start.getMonth();
-        const startYear = rangeStart.getFullYear();
-        const startMonth = rangeStart.getMonth();
-        const diffMonths = (year - startYear) * 12 + (month - startMonth);
+        const { year, month } = getJSTYearMonth(logStartUTC);
+        const [startYear, startMonth] = rangeStartJSTStr.split('-').map(Number);
+        const diffMonths = (year - startYear) * 12 + (month - (startMonth - 1));
         if (diffMonths >= 0 && diffMonths < bucketCount) {
           bucketIndex = diffMonths;
         }
       } else {
         // year
-        const year = start.getFullYear();
-        const startYear = rangeStart.getFullYear();
-        const diffYears = year - startYear;
+        const logYear = getJSTYear(logStartUTC);
+        const startYear = parseInt(rangeStartJSTStr.slice(0, 4));
+        const diffYears = logYear - startYear;
         if (diffYears >= 0 && diffYears < bucketCount) {
           bucketIndex = diffYears;
         }

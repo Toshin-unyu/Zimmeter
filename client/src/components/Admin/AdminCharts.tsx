@@ -40,7 +40,7 @@ interface StatsResponse {
   byCategory: CategoryStat[];
 }
 
-type ModeKey = 'day' | 'week' | 'month' | 'year' | 'custom';
+type ModeKey = 'hour' | 'day' | 'week' | 'month' | 'year' | 'custom';
 
 interface ChartContentProps {
   chartType: 'bar' | 'pie';
@@ -161,22 +161,22 @@ export const AdminWorkLogCharts = ({
   customEndDate?: string;
 }) => {
   const mode = useMemo((): ModeKey => {
-    if (timeRange === 'daily') return 'day';
+    if (timeRange === 'daily') return 'hour'; // 時間単位で24本のバー
     if (timeRange === 'weekly') return 'custom';
     if (timeRange === 'last30days') return 'custom';
     if (timeRange === 'monthly') return 'month';
-    
+
     if (timeRange === 'custom' && customStartDate && customEndDate) {
       const start = new Date(customStartDate);
       const end = new Date(customEndDate);
       const diffTime = Math.abs(end.getTime() - start.getTime());
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      
+
       if (diffDays <= 31) return 'custom'; // Day-level (custom usually implies day in this system)
       if (diffDays <= 366) return 'month';
       return 'year';
     }
-    
+
     return 'day';
   }, [timeRange, customStartDate, customEndDate]);
 
@@ -248,27 +248,33 @@ export const AdminWorkLogCharts = ({
     return { namesLabel, countLabel, fullLabel, filenameLabel };
   }, [users, effectiveUserIds]);
 
+  // Helper: JST日付文字列を生成 (YYYY-MM-DD)
+  const formatJSTDate = (date: Date): string => {
+    const jst = new Date(date.getTime() + 9 * 60 * 60 * 1000);
+    return jst.toISOString().slice(0, 10);
+  };
+
   // Unified Query for Stats (Bar & Pie)
   // Fetches aggregated stats for ALL selected users
   const { data: stats, isLoading } = useQuery<StatsResponse>({
     queryKey: ['logsStats', effectiveUserIds, mode, timeRange, customStartDate, customEndDate],
     queryFn: async () => {
       if (effectiveUserIds.length === 0) throw new Error('No user selected');
-      
+
       const params: any = { userIds: effectiveUserIds.join(','), mode };
-      
+
       if (timeRange === 'weekly') {
         const end = new Date();
         const start = new Date();
-        start.setDate(end.getDate() - 7);
-        params.start = start.toISOString().slice(0, 10);
-        params.end = end.toISOString().slice(0, 10);
+        start.setDate(end.getDate() - 6); // 今日を含めて7日間
+        params.start = formatJSTDate(start);
+        params.end = formatJSTDate(end);
       } else if (timeRange === 'last30days') {
         const end = new Date();
         const start = new Date();
-        start.setDate(end.getDate() - 30);
-        params.start = start.toISOString().slice(0, 10);
-        params.end = end.toISOString().slice(0, 10);
+        start.setDate(end.getDate() - 29); // 今日を含めて30日間
+        params.start = formatJSTDate(start);
+        params.end = formatJSTDate(end);
       } else if (timeRange === 'custom' && customStartDate && customEndDate) {
         params.mode = 'custom'; // Force API mode to custom to respect start/end dates
         params.start = customStartDate;
@@ -360,25 +366,34 @@ export const AdminWorkLogCharts = ({
     if (timeRange === 'custom' && customStartDate && customEndDate) {
       return `${customStartDate} ~ ${customEndDate}`;
     }
-    
+
     const now = new Date();
     const startDate = new Date();
-    
+
     const formatDate = (d: Date) => {
         return d.toLocaleDateString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-');
     };
 
+    const formatDateTime = (d: Date) => {
+        return d.toLocaleString('ja-JP', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+    };
+
     if (timeRange === 'daily') {
-         startDate.setHours(startDate.getHours() - 24);
-         return `${startDate.toLocaleString('ja-JP', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })} ~ ${now.toLocaleString('ja-JP', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}`;
+         // 直近24時間
+         startDate.setHours(startDate.getHours() - 23);
+         return `${formatDateTime(startDate)} ~ ${formatDateTime(now)}`;
     } else if (timeRange === 'weekly') {
-         startDate.setDate(startDate.getDate() - 7);
+         // 今日を含めて7日間
+         startDate.setDate(startDate.getDate() - 6);
     } else if (timeRange === 'last30days') {
-         startDate.setDate(startDate.getDate() - 30);
+         // 今日を含めて30日間
+         startDate.setDate(startDate.getDate() - 29);
     } else if (timeRange === 'monthly') {
-         startDate.setFullYear(startDate.getFullYear() - 1);
+         // 直近12ヶ月
+         startDate.setMonth(startDate.getMonth() - 11);
+         startDate.setDate(1);
     }
-    
+
     return `${formatDate(startDate)} ~ ${formatDate(now)}`;
   }, [timeRange, customStartDate, customEndDate]);
 
