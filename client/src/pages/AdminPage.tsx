@@ -3,18 +3,14 @@ import { UserList } from '../components/Admin/UserList';
 import { ProjectManagement } from '../components/Admin/ProjectManagement';
 import { MonitorTable } from '../components/Admin/MonitorTable';
 import { UserMultiSelectDropdown } from '../components/Admin/UserMultiSelectDropdown';
-import { ArrowLeft, LayoutDashboard, ChevronDown, ChevronUp, Users, FolderOpen, Calendar } from 'lucide-react';
+import { ChevronDown, ChevronUp, Users, FolderOpen, Calendar } from 'lucide-react';
 import { AdminWorkLogCharts } from '../components/Admin/AdminCharts';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/axios';
 
-interface AdminPageProps {
-  onBack: () => void;
-}
-
 type TimeRange = 'daily' | 'weekly' | 'last30days' | 'monthly' | 'custom';
 
-export const AdminPage = ({ onBack }: AdminPageProps) => {
+export const AdminPage = () => {
   const [isUserManagementOpen, setIsUserManagementOpen] = useState(false);
   const [isProjectManagementOpen, setIsProjectManagementOpen] = useState(false);
   const [selectedUsers, setSelectedUsers] = useState<number[]>([]);
@@ -41,29 +37,7 @@ export const AdminPage = ({ onBack }: AdminPageProps) => {
   });
 
   return (
-    <div className="min-h-screen bg-slate-50 font-sans">
-      <header className="t-header shadow-sm h-16 flex items-center whitespace-nowrap px-4 lg:px-6">
-        <div className="flex justify-between items-center container mx-auto h-full">
-          <div className="flex items-center gap-4 shrink-0">
-            <button 
-              onClick={onBack}
-              className="t-header-icon"
-              title="戻る"
-            >
-              <ArrowLeft size={20} />
-            </button>
-            <h1 className="t-header-title tracking-tight">
-              <LayoutDashboard className="text-sky-500" size={20} />
-              Zimmeter Admin
-            </h1>
-          </div>
-          <div className="flex items-center gap-4 shrink-0">
-             {/* Admin specific header actions */}
-          </div>
-        </div>
-      </header>
-
-      <main className="container mx-auto p-4 md:p-6 space-y-6">
+    <div className="space-y-6">
         {/* User and Time Range Selection */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
           <div className="flex flex-wrap items-center gap-6">
@@ -243,7 +217,6 @@ export const AdminPage = ({ onBack }: AdminPageProps) => {
             </div>
           )}
         </div>
-      </main>
     </div>
   );
 };

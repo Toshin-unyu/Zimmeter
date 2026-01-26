@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { QueryClient, QueryClientProvider, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Settings, Download, History, AlertCircle, Pencil, Square, LogOut, RotateCcw, User } from 'lucide-react';
+import { Download, History, AlertCircle, Pencil, Square, LogOut, RotateCcw } from 'lucide-react';
 import { getCategoryColor } from './lib/constants';
 import type { Category } from './lib/constants';
 import { api } from './lib/axios';
@@ -452,32 +452,32 @@ function ZimmeterApp() {
     <div className="min-h-screen bg-[#F4F6F8] text-gray-800 font-sans">
         <StatusGuard />
         {/* Header */}
-        <header className={`bg-[#0056B3] shadow px-4 lg:px-6 h-16 flex justify-between items-center sticky top-0 ${headerZIndex} whitespace-nowrap text-white`}>
+        <header className={`bg-white border-b border-gray-200 px-4 lg:px-6 h-16 flex justify-between items-center sticky top-0 ${headerZIndex} whitespace-nowrap`}>
             <div className="flex items-center gap-2 lg:gap-8 overflow-hidden">
                 <div className="flex items-center gap-3 shrink-0">
                     {/* Branding: [Icon] | [Name] */}
                     <div className="flex items-center gap-3">
-                        <div className="bg-white/15 p-2 rounded-md flex items-center justify-center w-10 h-10">
+                        <div className="bg-gray-100 p-2 rounded-lg flex items-center justify-center w-10 h-10 shadow-sm">
                             {/* T-Shield Icon */}
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6 text-white">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6 text-gray-800">
                                 <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
                                 <path d="M9 9h6"></path>
                                 <path d="M12 9v8"></path>
                             </svg>
                         </div>
-                        <div className="h-6 w-px bg-white/30"></div>
-                        <h1 className="text-xl font-bold tracking-tight text-white hidden sm:block">Zimmeter</h1>
+                        <div className="h-6 w-px bg-gray-200 mx-3"></div>
+                        <span className="text-xl font-bold tracking-[0.02em] text-gray-900 hidden sm:block">Zimmeter</span>
                     </div>
                 </div>
 
                 {/* Tabs */}
-                <div className="flex space-x-1 bg-black/20 p-1 rounded-md shrink-0">
+                <div className="flex items-center border border-gray-200 rounded-md ml-4 shrink-0">
                     <button
                         onClick={() => setActiveTab('main')}
-                        className={`px-3 lg:px-4 py-1.5 rounded text-xs lg:text-sm font-medium transition-colors ${
-                            activeTab === 'main' 
-                                ? 'bg-white text-[#0056B3] shadow-sm' 
-                                : 'text-white/70 hover:text-white'
+                        className={`px-3 lg:px-4 py-1.5 rounded-l-md text-xs lg:text-sm font-medium transition-colors ${
+                            activeTab === 'main'
+                                ? 'bg-slate-800 text-white'
+                                : 'text-gray-700 hover:bg-gray-100'
                         }`}
                     >
                         メイン
@@ -485,10 +485,10 @@ function ZimmeterApp() {
                     {userStatus?.role === 'ADMIN' && (
                         <button
                             onClick={() => setActiveTab('admin')}
-                            className={`px-3 lg:px-4 py-1.5 rounded text-xs lg:text-sm font-medium transition-colors ${
-                                activeTab === 'admin' 
-                                    ? 'bg-white text-[#0056B3] shadow-sm' 
-                                    : 'text-white/70 hover:text-white'
+                            className={`px-3 lg:px-4 py-1.5 rounded-r-md text-xs lg:text-sm font-medium transition-colors ${
+                                activeTab === 'admin'
+                                    ? 'bg-slate-800 text-white'
+                                    : 'text-gray-700 hover:bg-gray-100'
                             }`}
                         >
                             管理画面
@@ -496,28 +496,28 @@ function ZimmeterApp() {
                     )}
                 </div>
             </div>
-            
-            <div className="flex gap-1 lg:gap-2 shrink-0 items-center">
+
+            <div className="flex gap-4 shrink-0 items-center">
                 {/* App Specific Actions */}
-                <div className="flex gap-1 mr-2 border-r border-white/20 pr-2">
-                    <button 
+                <div className="flex gap-2 mr-2 border-r border-gray-200 pr-4">
+                    <button
                         onClick={() => setShowHistory(!showHistory)}
-                        className={`p-2 rounded-md hover:bg-white/10 transition-colors ${showHistory ? 'bg-white text-[#0056B3]' : 'text-white/80'}`}
+                        className={`p-2 rounded-md transition-colors ${showHistory ? 'bg-gray-200 text-gray-900' : 'text-gray-600 hover:bg-gray-100'}`}
                         title="履歴"
                     >
                         <History size={20} />
                     </button>
-                    <a 
-                        href={`${api.defaults.baseURL}/export/csv?uid=${uid}`} 
-                        target="_blank" 
+                    <a
+                        href={`${api.defaults.baseURL}/export/csv?uid=${uid}`}
+                        target="_blank"
                         rel="noopener noreferrer"
-                        className="p-2 text-white/80 hover:bg-white/10 rounded-md transition-colors"
+                        className="p-2 text-gray-600 hover:bg-gray-100 rounded-md transition-colors"
                         title="CSVエクスポート"
                     >
                         <Download size={20} />
                     </a>
-                    
-                    <button 
+
+                    <button
                         onClick={handleLeaveWork}
                         className="flex items-center gap-2 px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-md transition-all shadow-sm hover:shadow-md font-bold ml-1 border border-orange-600"
                         title="退社する"
@@ -528,20 +528,22 @@ function ZimmeterApp() {
                 </div>
 
                 {/* Common Toolbar: [Avatar] [Settings] [Bell] [Logout] */}
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-4">
                     {/* Avatar with User Card */}
                     <div className="relative" ref={userCardRef}>
                         <button
                             onClick={() => setShowUserCard(!showUserCard)}
-                            className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center border border-white/30 hover:bg-white/30 transition-colors text-white"
+                            className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center shadow-sm hover:bg-gray-200 transition-colors"
                             title="ユーザー情報"
                         >
-                            <User size={18} />
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                            </svg>
                         </button>
 
                         {/* User Info Card */}
                         {showUserCard && (
-                            <div className="absolute right-0 top-10 bg-white rounded-lg shadow-xl border border-gray-200 p-4 min-w-[200px] z-50">
+                            <div className="absolute right-0 top-12 bg-white rounded-lg shadow-xl border border-gray-200 p-4 min-w-[200px] z-50">
                                 <div className="space-y-3">
                                     <div>
                                         <p className="text-xs text-gray-400 uppercase tracking-wider">UID / Name</p>
@@ -565,17 +567,20 @@ function ZimmeterApp() {
                     </div>
 
                     {/* Settings */}
-                    <button 
+                    <button
                         onClick={() => setIsSettingsOpen(true)}
-                        className="p-2 text-white/80 hover:bg-white/10 rounded-full transition-colors"
+                        className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center shadow-sm hover:bg-gray-200 transition-colors"
                         title="設定"
                     >
-                        <Settings size={20} />
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
                     </button>
 
 
                     {/* Logout (Reset ID) */}
-                    <button 
+                    <button
                         onClick={() => {
                             if(window.confirm('ログアウトしますか？')) {
                                 localStorage.removeItem('zimmeter_uid');
@@ -583,10 +588,12 @@ function ZimmeterApp() {
                                 setShowLoginModal(true);
                             }
                         }}
-                        className="p-2 text-white/80 hover:bg-white/10 rounded-full transition-colors"
+                        className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center shadow-sm hover:bg-gray-200 transition-colors"
                         title="ログアウト"
                     >
-                        <LogOut size={20} />
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                        </svg>
                     </button>
                 </div>
             </div>
@@ -594,7 +601,7 @@ function ZimmeterApp() {
 
         <main className="container mx-auto p-4 md:p-6">
             {activeTab === 'admin' ? (
-                <AdminPage onBack={() => setActiveTab('main')} />
+                <AdminPage />
             ) : (
                 <>
                     {/* Status Bar */}
