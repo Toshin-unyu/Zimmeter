@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { QueryClient, QueryClientProvider, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Download, History, AlertCircle, Pencil, Square, LogOut, RotateCcw } from 'lucide-react';
+import { Download, History, AlertCircle, Pencil, Square, LogOut, RotateCcw, Menu, X } from 'lucide-react';
 import { getCategoryColor } from './lib/constants';
 import type { Category } from './lib/constants';
 import { api } from './lib/axios';
@@ -67,7 +67,8 @@ function ZimmeterApp() {
   const [hasLeftWork, setHasLeftWork] = useState(false);
   const [historyFilterCategoryId, setHistoryFilterCategoryId] = useState<number | null>(null);
   const [showUserCard, setShowUserCard] = useState(false);
-  const userCardRef = useRef<HTMLDivElement>(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const mobileMenuRef = useRef<HTMLDivElement>(null);
 
   // Undo Leave State
   const [isLeaveConfirmOpen, setIsLeaveConfirmOpen] = useState(false);
@@ -82,20 +83,20 @@ function ZimmeterApp() {
     // No timer cleanup needed anymore
   }, []);
 
-  // Close user card when clicking outside
+  // Close mobile menu when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (userCardRef.current && !userCardRef.current.contains(event.target as Node)) {
-        setShowUserCard(false);
+      if (mobileMenuRef.current && !mobileMenuRef.current.contains(event.target as Node)) {
+        setMobileMenuOpen(false);
       }
     };
-    if (showUserCard) {
+    if (mobileMenuOpen) {
       document.addEventListener('mousedown', handleClickOutside);
     }
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [showUserCard]);
+  }, [mobileMenuOpen]);
 
   // Monitor User Info Changes
   useEffect(() => {
@@ -452,8 +453,8 @@ function ZimmeterApp() {
     <div className="min-h-screen bg-[#F4F6F8] text-gray-800 font-sans">
         <StatusGuard />
         {/* Header */}
-        <header className={`bg-white border-b border-gray-200 px-4 lg:px-6 h-16 flex justify-between items-center sticky top-0 ${headerZIndex} whitespace-nowrap`}>
-            <div className="flex items-center gap-2 lg:gap-8 overflow-hidden">
+        <header className={`bg-white border-b border-gray-200 px-3 md:px-4 lg:px-6 h-16 flex justify-between items-center sticky top-0 ${headerZIndex}`}>
+            <div className="flex items-center gap-2 lg:gap-8">
                 <div className="flex items-center gap-3 shrink-0">
                     {/* Branding: [Icon] | [Name] */}
                     <div className="flex items-center gap-3">
@@ -466,12 +467,12 @@ function ZimmeterApp() {
                             </svg>
                         </div>
                         <div className="h-6 w-px bg-gray-200 mx-3"></div>
-                        <span className="text-xl font-bold tracking-[0.02em] text-gray-900 hidden sm:block">Zimmeter</span>
+                        <span className="text-base sm:text-xl font-bold tracking-[0.02em] text-gray-900">Zimmeter</span>
                     </div>
                 </div>
 
                 {/* Tabs */}
-                <div className="flex items-center border border-gray-200 rounded-md ml-4 shrink-0">
+                <div className="flex items-center border border-gray-200 rounded-md ml-1 sm:ml-4 shrink-0">
                     <button
                         onClick={() => setActiveTab('main')}
                         className={`px-3 lg:px-4 py-1.5 rounded-l-md text-xs lg:text-sm font-medium transition-colors ${
@@ -497,40 +498,41 @@ function ZimmeterApp() {
                 </div>
             </div>
 
-            <div className="flex gap-4 shrink-0 items-center">
-                {/* App Specific Actions */}
-                <div className="flex gap-2 mr-2 border-r border-gray-200 pr-4">
-                    <button
-                        onClick={() => setShowHistory(!showHistory)}
-                        className={`p-2 rounded-md transition-colors ${showHistory ? 'bg-gray-200 text-gray-900' : 'text-gray-600 hover:bg-gray-100'}`}
-                        title="履歴"
-                    >
-                        <History size={20} />
-                    </button>
-                    <a
-                        href={`${api.defaults.baseURL}/export/csv?uid=${uid}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="p-2 text-gray-600 hover:bg-gray-100 rounded-md transition-colors"
-                        title="CSVエクスポート"
-                    >
-                        <Download size={20} />
-                    </a>
+            <div className="flex shrink-0 items-center">
+                {/* Desktop buttons (md以上) */}
+                <div className="hidden md:flex gap-4 items-center">
+                    {/* App Specific Actions */}
+                    <div className="flex gap-2 mr-2 border-r border-gray-200 pr-4">
+                        <button
+                            onClick={() => setShowHistory(!showHistory)}
+                            className={`p-2 rounded-md transition-colors ${showHistory ? 'bg-gray-200 text-gray-900' : 'text-gray-600 hover:bg-gray-100'}`}
+                            title="履歴"
+                        >
+                            <History size={20} />
+                        </button>
+                        <a
+                            href={`${api.defaults.baseURL}/export/csv?uid=${uid}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-2 text-gray-600 hover:bg-gray-100 rounded-md transition-colors"
+                            title="CSVエクスポート"
+                        >
+                            <Download size={20} />
+                        </a>
 
-                    <button
-                        onClick={handleLeaveWork}
-                        className="flex items-center gap-2 px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-md transition-all shadow-sm hover:shadow-md font-bold ml-1 border border-orange-600"
-                        title="退社する"
-                    >
-                        <LogOut size={18} />
-                        <span className="hidden lg:inline text-sm">退社</span>
-                    </button>
-                </div>
+                        <button
+                            onClick={handleLeaveWork}
+                            className="flex items-center gap-2 px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-md transition-all shadow-sm hover:shadow-md font-bold ml-1 border border-orange-600"
+                            title="退社する"
+                        >
+                            <LogOut size={18} />
+                            <span className="hidden lg:inline text-sm">退社</span>
+                        </button>
+                    </div>
 
-                {/* Common Toolbar: [Avatar] [Settings] [Bell] [Logout] */}
-                <div className="flex items-center gap-4">
-                    {/* Avatar with User Card */}
-                    <div className="relative" ref={userCardRef}>
+                    {/* Common Toolbar: [Avatar] [Settings] [Logout] */}
+                    <div className="flex items-center gap-4">
+                        {/* Avatar */}
                         <button
                             onClick={() => setShowUserCard(!showUserCard)}
                             className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center shadow-sm hover:bg-gray-200 transition-colors"
@@ -541,63 +543,148 @@ function ZimmeterApp() {
                             </svg>
                         </button>
 
-                        {/* User Info Card */}
-                        {showUserCard && (
-                            <div className="absolute right-0 top-12 bg-white rounded-lg shadow-xl border border-gray-200 p-4 min-w-[200px] z-50">
-                                <div className="space-y-3">
-                                    <div>
-                                        <p className="text-xs text-gray-400 uppercase tracking-wider">UID / Name</p>
-                                        <p className="text-sm font-medium text-gray-800">{uid}</p>
-                                    </div>
-                                    <div>
-                                        <p className="text-xs text-gray-400 uppercase tracking-wider">Role</p>
-                                        <p className="text-sm font-medium text-gray-800">
-                                            {userStatus?.role === 'ADMIN' ? 'ADMIN' : 'USER'}
-                                        </p>
-                                    </div>
-                                    <div>
-                                        <p className="text-xs text-gray-400 uppercase tracking-wider">Status</p>
-                                        <p className={`text-sm font-medium ${hasLeftWork ? 'text-gray-500' : activeLogQuery.data ? 'text-green-600' : 'text-yellow-600'}`}>
-                                            {hasLeftWork ? '退社済み' : activeLogQuery.data ? '業務中' : '待機中'}
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
+                        {/* Settings */}
+                        <button
+                            onClick={() => setIsSettingsOpen(true)}
+                            className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center shadow-sm hover:bg-gray-200 transition-colors"
+                            title="設定"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                        </button>
+
+                        {/* Logout (Reset ID) */}
+                        <button
+                            onClick={() => {
+                                if(window.confirm('ログアウトしますか？')) {
+                                    localStorage.removeItem('zimmeter_uid');
+                                    setUid('');
+                                    setShowLoginModal(true);
+                                }
+                            }}
+                            className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center shadow-sm hover:bg-gray-200 transition-colors"
+                            title="ログアウト"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                            </svg>
+                        </button>
                     </div>
+                </div>
 
-                    {/* Settings */}
+                {/* Mobile hamburger menu (md未満) */}
+                <div className="md:hidden relative" ref={mobileMenuRef}>
                     <button
-                        onClick={() => setIsSettingsOpen(true)}
-                        className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center shadow-sm hover:bg-gray-200 transition-colors"
-                        title="設定"
+                        onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                        className="p-2 text-gray-600 hover:bg-gray-100 rounded-md transition-colors"
+                        title="メニュー"
                     >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                        </svg>
+                        {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
                     </button>
 
+                    {mobileMenuOpen && (
+                        <div className="absolute right-0 top-12 bg-white rounded-lg shadow-xl border border-gray-200 min-w-[200px] z-50 py-2">
+                            {/* App Actions */}
+                            <button
+                                onClick={() => { setShowHistory(!showHistory); setMobileMenuOpen(false); }}
+                                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                            >
+                                <History size={18} />
+                                履歴
+                            </button>
+                            <a
+                                href={`${api.defaults.baseURL}/export/csv?uid=${uid}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                                onClick={() => setMobileMenuOpen(false)}
+                            >
+                                <Download size={18} />
+                                CSVエクスポート
+                            </a>
+                            <button
+                                onClick={() => { handleLeaveWork(); setMobileMenuOpen(false); }}
+                                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-orange-600 hover:bg-orange-50 transition-colors font-medium"
+                            >
+                                <LogOut size={18} />
+                                退社
+                            </button>
 
-                    {/* Logout (Reset ID) */}
-                    <button
-                        onClick={() => {
-                            if(window.confirm('ログアウトしますか？')) {
-                                localStorage.removeItem('zimmeter_uid');
-                                setUid('');
-                                setShowLoginModal(true);
-                            }
-                        }}
-                        className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center shadow-sm hover:bg-gray-200 transition-colors"
-                        title="ログアウト"
-                    >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                        </svg>
-                    </button>
+                            {/* Separator */}
+                            <div className="border-t border-gray-200 my-1"></div>
+
+                            {/* User Actions */}
+                            <button
+                                onClick={() => { setShowUserCard(true); setMobileMenuOpen(false); }}
+                                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-[18px] w-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                </svg>
+                                ユーザー情報
+                            </button>
+                            <button
+                                onClick={() => { setIsSettingsOpen(true); setMobileMenuOpen(false); }}
+                                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-[18px] w-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                </svg>
+                                設定
+                            </button>
+                            <button
+                                onClick={() => {
+                                    if(window.confirm('ログアウトしますか？')) {
+                                        localStorage.removeItem('zimmeter_uid');
+                                        setUid('');
+                                        setShowLoginModal(true);
+                                    }
+                                    setMobileMenuOpen(false);
+                                }}
+                                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-[18px] w-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                                </svg>
+                                ログアウト
+                            </button>
+                        </div>
+                    )}
                 </div>
             </div>
         </header>
+
+        {/* User Info Card (overlay - desktop/mobile shared) */}
+        {showUserCard && (
+            <div className="fixed inset-0 z-50" onClick={() => setShowUserCard(false)}>
+                <div
+                    className="absolute right-4 top-[72px] bg-white rounded-lg shadow-xl border border-gray-200 p-4 min-w-[200px]"
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <div className="space-y-3">
+                        <div>
+                            <p className="text-xs text-gray-400 uppercase tracking-wider">UID / Name</p>
+                            <p className="text-sm font-medium text-gray-800">{uid}</p>
+                        </div>
+                        <div>
+                            <p className="text-xs text-gray-400 uppercase tracking-wider">Role</p>
+                            <p className="text-sm font-medium text-gray-800">
+                                {userStatus?.role === 'ADMIN' ? 'ADMIN' : 'USER'}
+                            </p>
+                        </div>
+                        <div>
+                            <p className="text-xs text-gray-400 uppercase tracking-wider">Status</p>
+                            <p className={`text-sm font-medium ${hasLeftWork ? 'text-gray-500' : activeLogQuery.data ? 'text-green-600' : 'text-yellow-600'}`}>
+                                {hasLeftWork ? '退社済み' : activeLogQuery.data ? '業務中' : '待機中'}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )}
 
         <main className="container mx-auto p-4 md:p-6">
             {activeTab === 'admin' ? (
