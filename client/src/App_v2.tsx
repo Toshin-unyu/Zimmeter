@@ -467,7 +467,7 @@ function ZimmeterApp() {
                             </svg>
                         </div>
                         <div className="h-6 w-px bg-gray-200 mx-3"></div>
-                        <span className="text-base sm:text-xl font-bold tracking-[0.02em] text-gray-900">Zimmeter</span>
+                        <span className="text-xl font-bold tracking-[0.02em] text-gray-900">Zimmeter</span>
                     </div>
                 </div>
 
