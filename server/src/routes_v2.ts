@@ -1507,13 +1507,6 @@ router.get('/logs/stats', async (req: Request, res: Response) => {
       let bucketIndex = -1;
 
       if (bucketMode === 'hour') {
-        // ログのJST時刻を取得してバケットインデックスを計算
-        const logJST = new Date(logStartUTC.getTime() + JST_OFFSET);
-        const logHour = logJST.getUTCHours();
-        // rangeStartHour からの差分を計算
-        let diffHours = logHour - rangeStartHour;
-        if (diffHours < 0) diffHours += 24;
-        // 日付も考慮（24時間以内かどうか）
         const hoursSinceStart = Math.floor((logStartUTC.getTime() - rangeStartUTC.getTime()) / (1000 * 60 * 60));
         if (hoursSinceStart >= 0 && hoursSinceStart < bucketCount) {
           bucketIndex = hoursSinceStart;
