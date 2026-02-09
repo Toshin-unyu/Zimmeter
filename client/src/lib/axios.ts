@@ -8,7 +8,7 @@ export const api = axios.create({
 api.interceptors.request.use((config) => {
   const uid = localStorage.getItem('zimmeter_uid');
   if (uid) {
-    config.headers['x-user-id'] = uid;
+    config.headers['x-user-id'] = encodeURIComponent(uid);
   }
   return config;
 });

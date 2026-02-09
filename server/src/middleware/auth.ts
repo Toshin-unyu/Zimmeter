@@ -18,8 +18,9 @@ declare global {
 }
 
 export const statusGuard = async (req: Request, res: Response, next: NextFunction) => {
-  // Get UID from header or query
-  const uid = (req.headers['x-user-id'] as string) || (req.query.uid as string);
+  // Get UID from header or query (URLエンコードされた日本語UIDをデコード)
+  const rawUid = (req.headers['x-user-id'] as string) || (req.query.uid as string);
+  const uid = rawUid ? decodeURIComponent(rawUid) : undefined;
 
   if (!uid) {
     // If no UID, proceed without user context (allow public access or handle in routes)
@@ -79,9 +80,10 @@ export const statusGuard = async (req: Request, res: Response, next: NextFunctio
     const anyError = error as any;
     if (anyError?.code === 'P2002') {
       try {
-        const uid = (req.headers['x-user-id'] as string) || (req.query.uid as string);
-        if (uid) {
-          const existing = await prisma.user.findUnique({ where: { uid } });
+        const retryRawUid = (req.headers['x-user-id'] as string) || (req.query.uid as string);
+        const retryUid = retryRawUid ? decodeURIComponent(retryRawUid) : undefined;
+        if (retryUid) {
+          const existing = await prisma.user.findUnique({ where: { uid: retryUid } });
           if (existing) {
             req.user = {
               id: existing.id,
