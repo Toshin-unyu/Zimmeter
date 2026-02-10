@@ -1,0 +1,42 @@
+# 依存ライブラリ
+node_modules/
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# 環境変数（パスワードなど）
+.env
+.env.local
+.env.*.local
+
+# OSのシステムファイル
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# ログ・一時ファイル
+*.log
+*.tmp
+*.bak
+
+# Claude Code関連（共有しない）
+CLAUDE.md
+SESSION.md
+REFERENCE.md
+docs/development/
+docs/archive/
+tests/archive/
+
+# サーバー固有ファイル
+*.pdf
+uploads/*
+!uploads/.gitkeep
