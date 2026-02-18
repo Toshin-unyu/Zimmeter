@@ -1089,6 +1089,10 @@ router.patch('/logs/:id', async (req: Request, res: Response) => {
 
     console.log(`[PATCH Log ${id}] Recalculating duration. NewStart: ${newStart}, NewEnd: ${newEnd}`);
 
+    if (newStart && newEnd && newEnd.getTime() < newStart.getTime()) {
+        return res.status(400).json({ error: '終了時刻は開始時刻以降にしてください' });
+    }
+
     if (newStart && newEnd) {
         data.duration = Math.floor((newEnd.getTime() - newStart.getTime()) / 1000);
         console.log(`[PATCH Log ${id}] Calculated duration: ${data.duration} seconds`);

@@ -27,12 +27,23 @@ export const EditLogModal = ({ isOpen, onClose, mode, log, categories, uid, init
   const { showToast } = useToast();
   const [selectedCatId, setSelectedCatId] = useState<number | null>(null);
   const [startTimeStr, setStartTimeStr] = useState<string>(''); // HH:mm for create
+  const [editStartTimeStr, setEditStartTimeStr] = useState<string>('');
+  const [editEndTimeStr, setEditEndTimeStr] = useState<string>('');
 
   useEffect(() => {
     if (!isOpen) return;
 
     if (mode === 'edit' && log) {
       setSelectedCatId(log.categoryId);
+      const pad = (n: number) => String(n).padStart(2, '0');
+      const start = new Date(log.startTime);
+      setEditStartTimeStr(`${pad(start.getHours())}:${pad(start.getMinutes())}`);
+      if (log.endTime) {
+        const end = new Date(log.endTime);
+        setEditEndTimeStr(`${pad(end.getHours())}:${pad(end.getMinutes())}`);
+      } else {
+        setEditEndTimeStr('');
+      }
       return;
     }
 
@@ -93,6 +104,35 @@ export const EditLogModal = ({ isOpen, onClose, mode, log, categories, uid, init
 
     if (mode === 'edit') {
       const payload: any = { categoryId: selectedCatId };
+
+      // 開始時刻
+      const [esh, esm] = editStartTimeStr.split(':').map(Number);
+      if ([esh, esm].some(v => Number.isNaN(v))) {
+        showToast('開始時刻を正しく入力してください', 'error');
+        return;
+      }
+      const logDate = new Date(log!.startTime);
+      const newStart = new Date(logDate);
+      newStart.setHours(esh, esm, 0, 0);
+      payload.startTime = newStart.toISOString();
+
+      // 終了時刻（endTimeがあるログのみ）
+      if (log?.endTime && editEndTimeStr) {
+        const [eeh, eem] = editEndTimeStr.split(':').map(Number);
+        if ([eeh, eem].some(v => Number.isNaN(v))) {
+          showToast('終了時刻を正しく入力してください', 'error');
+          return;
+        }
+        const newEnd = new Date(logDate);
+        newEnd.setHours(eeh, eem, 0, 0);
+
+        if (newEnd < newStart) {
+          showToast('終了時刻は開始時刻以降にしてください', 'error');
+          return;
+        }
+        payload.endTime = newEnd.toISOString();
+      }
+
       updateMutation.mutate(payload);
       return;
     }
@@ -123,7 +163,31 @@ export const EditLogModal = ({ isOpen, onClose, mode, log, categories, uid, init
         
         {mode === 'edit' ? (
             <div className="mb-4 space-y-3">
-                <p className="text-sm text-gray-600">作業内容を修正できます。</p>
+                <p className="text-sm text-gray-600">作業内容・時刻を修正できます。</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-600 mb-1">開始時刻</label>
+                    <input
+                      type="time"
+                      value={editStartTimeStr}
+                      onChange={(e) => setEditStartTimeStr(e.target.value)}
+                      className="w-full p-2 border rounded-lg bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-600 mb-1">終了時刻</label>
+                    <input
+                      type="time"
+                      value={editEndTimeStr}
+                      onChange={(e) => setEditEndTimeStr(e.target.value)}
+                      className="w-full p-2 border rounded-lg bg-white"
+                      disabled={!log?.endTime}
+                    />
+                    {!log?.endTime && (
+                      <p className="text-xs text-gray-400 mt-1">計測中のため編集不可</p>
+                    )}
+                  </div>
+                </div>
             </div>
         ) : (
             <p className="mb-4 text-gray-600">追加する作業内容と時間を入力してください。</p>
@@ -166,7 +230,7 @@ export const EditLogModal = ({ isOpen, onClose, mode, log, categories, uid, init
           <button onClick={onClose} className="btn-secondary">キャンセル</button>
           <button 
             onClick={handleSave} 
-            disabled={!selectedCatId || (mode === 'create' && !startTimeStr) || updateMutation.isPending || createMutation.isPending}
+            disabled={!selectedCatId || (mode === 'create' && !startTimeStr) || (mode === 'edit' && !editStartTimeStr) || updateMutation.isPending || createMutation.isPending}
             className="btn-primary disabled:opacity-50"
           >
             {(updateMutation.isPending || createMutation.isPending) ? '保存中...' : '保存'}
