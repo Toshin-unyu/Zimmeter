@@ -692,7 +692,7 @@ function ZimmeterApp() {
             ) : (
                 <>
                     {/* Status Bar */}
-                    <div className="bg-white rounded-2xl shadow-sm p-6 mb-8 flex flex-col md:flex-row items-center justify-between gap-4 border border-gray-100">
+                    <div className="bg-white rounded-2xl shadow-sm p-3 sm:p-6 mb-4 sm:mb-8 flex flex-col md:flex-row items-center justify-between gap-4 border border-gray-100">
                         <div className="flex items-center gap-4 w-full">
                             <div className={`w-3 h-3 rounded-full animate-pulse ${activeLogQuery.data ? 'bg-green-500' : 'bg-gray-300'}`}></div>
                             <div>
@@ -715,7 +715,7 @@ function ZimmeterApp() {
                         </div>
                         <div className="flex items-center gap-4 w-full md:w-auto">
                             <div className="text-right">
-                                <div className="text-5xl font-mono font-light tracking-tight text-slate-700 tabular-nums">
+                                <div className="text-3xl sm:text-5xl font-mono font-light tracking-tight text-slate-700 tabular-nums">
                                     {formattedTime}
                                 </div>
                             </div>
@@ -734,7 +734,7 @@ function ZimmeterApp() {
                     {/* Primary Buttons */}
                     <div className="mb-8">
                         <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4 px-1">Main Actions</h3>
-                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-4">
                             {primaryButtons.map(cat => (
                                 <TaskButton
                                     key={cat.id}
@@ -750,7 +750,7 @@ function ZimmeterApp() {
                     {secondaryButtons.length > 0 && (
                         <div>
                             <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4 px-1">Other Actions</h3>
-                            <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
                                 {secondaryButtons.map(cat => (
                                     <TaskButton
                                         key={cat.id}
