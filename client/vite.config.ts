@@ -14,8 +14,6 @@ export default defineConfig(({ mode }) => {
     server: {
       host: true,
       port: 9002,
-      host: true,
-      allowedHosts: ['zimmeter-staging.toshinunyu.jp', 'zimmeter.toshinunyu.jp', 'localhost'],
       proxy: {
         '/api': {
           target: apiTarget,
