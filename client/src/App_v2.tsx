@@ -454,11 +454,11 @@ function ZimmeterApp() {
         <StatusGuard />
         {/* Header */}
         <header className={`bg-white border-b border-gray-200 px-3 md:px-4 lg:px-6 h-16 flex justify-between items-center sticky top-0 ${headerZIndex}`}>
-            <div className="flex items-center gap-2 lg:gap-8">
+            <div className="flex items-center gap-1 sm:gap-2 lg:gap-8">
                 <div className="flex items-center gap-3 shrink-0">
                     {/* Branding: [Icon] | [Name] */}
                     <div className="flex items-center gap-3">
-                        <div className="bg-gray-100 p-2 rounded-lg flex items-center justify-center w-10 h-10 shadow-sm">
+                        <div className="bg-gray-100 p-2 rounded-lg flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 shadow-sm">
                             {/* T-Shield Icon */}
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6 text-gray-800">
                                 <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
@@ -466,8 +466,8 @@ function ZimmeterApp() {
                                 <path d="M12 9v8"></path>
                             </svg>
                         </div>
-                        <div className="h-6 w-px bg-gray-200 mx-3"></div>
-                        <span className="text-xl font-bold tracking-[0.02em] text-gray-900">Zimmeter</span>
+                        <div className="h-6 w-px bg-gray-200 mx-3 hidden sm:block"></div>
+                        <span className="text-sm sm:text-xl font-bold tracking-[0.02em] text-gray-900">Zimmeter</span>
                     </div>
                 </div>
 
@@ -475,7 +475,7 @@ function ZimmeterApp() {
                 <div className="flex items-center border border-gray-200 rounded-md ml-1 sm:ml-4 shrink-0">
                     <button
                         onClick={() => setActiveTab('main')}
-                        className={`px-3 lg:px-4 py-1.5 rounded-l-md text-xs lg:text-sm font-medium transition-colors ${
+                        className={`px-2 sm:px-3 lg:px-4 py-1.5 rounded-l-md text-xs lg:text-sm font-medium transition-colors ${
                             activeTab === 'main'
                                 ? 'bg-slate-800 text-white'
                                 : 'text-gray-700 hover:bg-gray-100'
@@ -486,7 +486,7 @@ function ZimmeterApp() {
                     {userStatus?.role === 'ADMIN' && (
                         <button
                             onClick={() => setActiveTab('admin')}
-                            className={`px-3 lg:px-4 py-1.5 rounded-r-md text-xs lg:text-sm font-medium transition-colors ${
+                            className={`px-2 sm:px-3 lg:px-4 py-1.5 rounded-r-md text-xs lg:text-sm font-medium transition-colors ${
                                 activeTab === 'admin'
                                     ? 'bg-slate-800 text-white'
                                     : 'text-gray-700 hover:bg-gray-100'
@@ -758,7 +758,7 @@ function ZimmeterApp() {
                                         isActive={activeLogQuery.data?.categoryId === cat.id}
                                         onClick={() => handleTaskSwitch(cat.id)}
                                         onDoubleClick={() => handleHistoryDoubleClick(cat.id)}
-                                        className="h-16 text-sm"
+                                        className="h-12 sm:h-16 text-sm"
                                     />
                                 ))}
                             </div>
