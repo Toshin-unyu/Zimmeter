@@ -857,7 +857,7 @@ function ZimmeterApp() {
 
         {showIdleAlert && !activeLogQuery.data && !showLoginModal && !hasLeftWork && (
             <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 pointer-events-none transition-opacity duration-500">
-                <div className="bg-white px-8 py-6 rounded-2xl shadow-2xl flex flex-col items-center pointer-events-auto animate-bounce border-2 border-red-100">
+                <div className="bg-white px-8 py-6 rounded-2xl shadow-2xl flex flex-col items-center pointer-events-auto border-2 border-red-100">
                     <div className="bg-red-100 p-3 rounded-full mb-3 text-red-500">
                         <AlertCircle size={32} />
                     </div>
