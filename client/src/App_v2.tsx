@@ -198,11 +198,11 @@ function ZimmeterApp() {
         return;
     }
     // Only show idle alert if NOT left work
-    if (!hasLeftWork) {
+    if (!hasLeftWork && !showIdleAlert) {
         const timer = setTimeout(() => setShowIdleAlert(true), 30000);
         return () => clearTimeout(timer);
     }
-  }, [activeLogQuery.data, activeLogQuery.isLoading, hasLeftWork]);
+  }, [activeLogQuery.data, activeLogQuery.isLoading, hasLeftWork, showIdleAlert]);
 
   // 3. Fetch Settings
   const settingsQuery = useQuery({
