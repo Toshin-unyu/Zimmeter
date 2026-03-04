@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { QueryClient, QueryClientProvider, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Download, History, AlertCircle, Pencil, Square, LogOut, RotateCcw, Menu, X } from 'lucide-react';
+import { Download, History, AlertCircle, Pencil, Square, LogOut, RotateCcw, Menu, X, FileText } from 'lucide-react';
 import { getCategoryColor } from './lib/constants';
 import type { Category } from './lib/constants';
 import { api } from './lib/axios';
@@ -12,6 +12,7 @@ import { LoginModal } from './components/LoginModal';
 import { CheckStatusModal } from './components/CheckStatusModal';
 import { LeaveConfirmModal } from './components/LeaveConfirmModal';
 import { StatusGuard } from './components/Common/StatusGuard';
+import { ChangelogModal } from './components/Common/ChangelogModal';
 import { TimeDecoration } from './components/Common/TimeDecoration';
 import { TodayHistoryBar } from './components/Common/TodayHistoryBar';
 import { useUserStatus } from './hooks/useUserStatus';
@@ -68,6 +69,7 @@ function ZimmeterApp() {
   const [historyFilterCategoryId, setHistoryFilterCategoryId] = useState<number | null>(null);
   const [showUserCard, setShowUserCard] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [showChangelog, setShowChangelog] = useState(false);
   const mobileMenuRef = useRef<HTMLDivElement>(null);
 
   // Undo Leave State
@@ -519,6 +521,13 @@ function ZimmeterApp() {
                         >
                             <Download size={20} />
                         </a>
+                        <button
+                            onClick={() => setShowChangelog(true)}
+                            className="p-2 text-gray-600 hover:bg-gray-100 rounded-md transition-colors"
+                            title="更新履歴"
+                        >
+                            <FileText size={20} />
+                        </button>
 
                         <button
                             onClick={handleLeaveWork}
@@ -604,6 +613,13 @@ function ZimmeterApp() {
                                 <Download size={18} />
                                 CSVエクスポート
                             </a>
+                            <button
+                                onClick={() => { setShowChangelog(true); setMobileMenuOpen(false); }}
+                                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                            >
+                                <FileText size={18} />
+                                更新履歴
+                            </button>
                             <button
                                 onClick={() => { handleLeaveWork(); setMobileMenuOpen(false); }}
                                 className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-orange-600 hover:bg-orange-50 transition-colors font-medium"
@@ -850,9 +866,14 @@ function ZimmeterApp() {
             onConfirm={confirmLeaveWork}
         />
 
-        <LoginModal 
+        <LoginModal
             isOpen={showLoginModal}
             onSubmit={handleLogin}
+        />
+
+        <ChangelogModal
+            isOpen={showChangelog}
+            onClose={() => setShowChangelog(false)}
         />
 
         {showIdleAlert && !activeLogQuery.data && !showLoginModal && !hasLeftWork && (
