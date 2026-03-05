@@ -317,8 +317,27 @@ const ExportPanel = ({ uid, onDone, compact = false }: ExportPanelProps) => {
 
   const handleDownload = () => {
     const base = `${api.defaults.baseURL}/export/csv?uid=${uid}&start=${startDate}&end=${endDate}`;
-    if (wantDetail) window.open(`${base}&mode=detail`, '_blank');
-    if (wantSummary && !singleDay) window.open(`${base}&mode=summary`, '_blank');
+    const triggerDownload = (url: string) => {
+      const a = document.createElement('a');
+      a.href = url;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    };
+    const needsBoth = wantDetail && wantSummary && !singleDay;
+    if (wantDetail) triggerDownload(`${base}&mode=detail`);
+    if (wantSummary && !singleDay) {
+      if (needsBoth) {
+        setTimeout(() => {
+          triggerDownload(`${base}&mode=summary`);
+          onDone?.();
+        }, 300);
+        return;
+      } else {
+        triggerDownload(`${base}&mode=summary`);
+      }
+    }
     onDone?.();
   };
 
