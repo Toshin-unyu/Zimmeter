@@ -1100,17 +1100,81 @@ router.patch('/logs/:id', async (req: Request, res: Response) => {
         console.log(`[PATCH Log ${id}] Cannot calculate duration (missing start or end)`);
     }
 
-    const updatedLog = await prisma.workLog.update({
-      where: { id: Number(id) },
-      data,
+    // diff構築（変更前後の値を記録）
+    const changes: Record<string, { old: any; new: any; oldName?: string; newName?: string }> = {};
+
+    if (data.startTime && data.startTime.getTime() !== log.startTime.getTime()) {
+      changes.startTime = { old: log.startTime.toISOString(), new: data.startTime.toISOString() };
+    }
+    if (data.endTime !== undefined) {
+      const oldEnd = log.endTime ? log.endTime.toISOString() : null;
+      const newEnd = data.endTime ? data.endTime.toISOString() : null;
+      if (oldEnd !== newEnd) {
+        changes.endTime = { old: oldEnd, new: newEnd };
+      }
+    }
+    if (data.categoryId && data.categoryId !== log.categoryId) {
+      changes.categoryId = {
+        old: log.categoryId,
+        new: data.categoryId,
+        oldName: log.categoryNameSnapshot,
+        newName: data.categoryNameSnapshot,
+      };
+    }
+
+    // トランザクションで履歴作成+ログ更新を同時実行
+    const hasChanges = Object.keys(changes).length > 0;
+    const updatedLog = await prisma.$transaction(async (tx) => {
+      if (hasChanges) {
+        await tx.workLogHistory.create({
+          data: {
+            workLogId: Number(id),
+            editedById: currentUser.id,
+            changes,
+          },
+        });
+      }
+      return tx.workLog.update({
+        where: { id: Number(id) },
+        data,
+      });
     });
-    
+
     console.log(`[PATCH Log ${id}] Updated log result:`, updatedLog);
 
     res.json(updatedLog);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to update log' });
+  }
+});
+
+// GET /api/logs/:id/history
+// ログの修正履歴を取得（本人 or ADMIN のみ）
+router.get('/logs/:id/history', async (req: Request, res: Response) => {
+  try {
+    const currentUser = getUser(req);
+    const { id } = req.params;
+
+    const log = await prisma.workLog.findUnique({ where: { id: Number(id) } });
+    if (!log) return res.status(404).json({ error: 'Log not found' });
+
+    if (log.userId !== currentUser.id && currentUser.role !== 'ADMIN') {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    const histories = await prisma.workLogHistory.findMany({
+      where: { workLogId: Number(id) },
+      include: {
+        editedBy: { select: { id: true, name: true, role: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    res.json(histories);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to fetch log history' });
   }
 });
 

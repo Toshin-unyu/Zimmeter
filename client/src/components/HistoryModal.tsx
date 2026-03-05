@@ -2,6 +2,7 @@ import { X, Pencil, Plus } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type { Category } from '../lib/constants';
 import { getCategoryStyle } from '../lib/utils';
+import { LogHistoryDetail } from './LogHistoryDetail';
 
 interface WorkLog {
   id: number;
@@ -277,6 +278,7 @@ export const HistoryModal = ({
                               </span>
                             )}
                           </div>
+                          {log.isEdited && <LogHistoryDetail logId={log.id} />}
                         </div>
                       );
                     })}

@@ -5,6 +5,7 @@ import { Activity, Clock, Pencil, Download } from 'lucide-react';
 import { getCategoryColor } from '../../lib/constants';
 import type { Category } from '../../lib/constants';
 import { EditLogModal } from '../EditLogModal';
+import { LogHistoryDetail } from '../LogHistoryDetail';
 
 interface MonitorLog {
   id: number;
@@ -378,6 +379,7 @@ export const MonitorTable = ({ selectedUsers = [], timeRange = 'daily', customSt
                                 {new Date(log.updatedAt).toLocaleString([], { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                             </div>
                         )}
+                        {log.isEdited && <LogHistoryDetail logId={log.id} />}
                     </td>
                     <td className="p-3 text-right font-mono text-gray-600">
                       {log.endTime ? (
