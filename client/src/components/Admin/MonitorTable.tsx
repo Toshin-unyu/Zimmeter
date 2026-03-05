@@ -39,8 +39,11 @@ interface MonitorTableProps {
   customEndDate?: string;
 }
 
+type CsvMode = 'detail' | 'summary';
+
 export const MonitorTable = ({ selectedUsers = [], timeRange = 'daily', customStartDate, customEndDate }: MonitorTableProps) => {
   const [editingLog, setEditingLog] = useState<MonitorLog | null>(null);
+  const [csvMode, setCsvMode] = useState<CsvMode>('detail');
 
   // Calculate date range for status fetch
   const getDateRangeForStatus = () => {
@@ -135,6 +138,24 @@ export const MonitorTable = ({ selectedUsers = [], timeRange = 'daily', customSt
     }
   };
 
+  const downloadCsvBlob = (csvContent: string, filename: string) => {
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const formatDurationHm = (seconds: number): string => {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    return `${h}h${String(m).padStart(2, '0')}m`;
+  };
+
   const handleDownloadCsv = () => {
     if (!logs || logs.length === 0) {
       alert('データがありません');
@@ -142,87 +163,152 @@ export const MonitorTable = ({ selectedUsers = [], timeRange = 'daily', customSt
     }
 
     try {
-      // Header
-      const header = ["Time", "User", "Role", "UID", "Daily Status", "Task", "備考", "Type", "Mod Time", "Duration"];
-      
-      // Rows
-      const rows = logs.map(log => {
-        // Determine Daily Status (Strict JST)
-        const dateObj = new Date(log.startTime);
-        const jstDate = new Date(dateObj.toLocaleString("en-US", { timeZone: "Asia/Tokyo" }));
-        const y = jstDate.getFullYear();
-        const m = String(jstDate.getMonth() + 1).padStart(2, '0');
-        const d = String(jstDate.getDate()).padStart(2, '0');
-        const dateKey = `${y}-${m}-${d}`;
-        
-        const status = dailyStatuses?.find(s => s.userId === log.userId && s.date === dateKey);
-        
-        let statusStr = '-';
-        if (status) {
-            const dateShort = `${Number(m)}.${Number(d)}`;
-            if (status.isFixed) statusStr = `${dateShort} 退社済(補正済)`;
-            else if (status.hasLeft) statusStr = `${dateShort} 退社済`;
-            else statusStr = `${dateShort} 未退社`;
-        } else {
-            const now = new Date();
-            const jstNow = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Tokyo" }));
-            if (y === jstNow.getFullYear() && Number(m) === jstNow.getMonth()+1 && Number(d) === jstNow.getDate()) {
-                statusStr = '勤務中';
-            } else {
-                const dateShort = `${Number(m)}.${Number(d)}`;
-                statusStr = `${dateShort} 未退社`;
-            }
-        }
-
-        // Determine Type Label and Modification Time logic
-        let typeLabel = '通常';
-        let modTimeStr = '-';
-        
-        if (log.isManual) {
-            if (log.isEdited) {
-                typeLabel = '作成済(変更済)';
-                modTimeStr = new Date(log.updatedAt).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' });
-            } else {
-                typeLabel = '作成済';
-                modTimeStr = new Date(log.updatedAt).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' });
-            }
-        } else if (log.isEdited) {
-            typeLabel = '変更済';
-            modTimeStr = new Date(log.updatedAt).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' });
-        }
-
-        return [
-          new Date(log.startTime).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }),
-          log.user.name,
-          log.user.role,
-          log.user.uid,
-          statusStr,
-          `"${log.categoryNameSnapshot.replace(/"/g, '""')}"`, // Escape CSV
-          `"${(log.note || '').replace(/"/g, '""')}"`,
-          typeLabel,
-          modTimeStr,
-          log.duration ? `${Math.floor(log.duration / 60)}m` : 'Running'
-        ];
-      });
-
-      // Combine with BOM for Excel UTF-8 support
       const bom = '\uFEFF';
-      const csvContent = bom + [
-        header.join(','),
-        ...rows.map(r => r.join(','))
-      ].join('\n');
 
-      // Download
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      const dateStr = new Date().toISOString().slice(0, 10);
-      link.href = url;
-      link.setAttribute('download', `monitor_logs_${dateStr}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+      if (csvMode === 'summary') {
+        // Summary mode: group by user x date x category
+        const multiUser = selectedUsers.length > 1;
+        type SummaryKey = string; // "userName|date|category"
+        const aggregated = new Map<SummaryKey, { user: string; date: string; category: string; seconds: number }>();
+
+        for (const log of logs) {
+          const dateObj = new Date(log.startTime);
+          const jstDate = new Date(dateObj.toLocaleString("en-US", { timeZone: "Asia/Tokyo" }));
+          const dateKey = `${jstDate.getFullYear()}/${String(jstDate.getMonth() + 1).padStart(2, '0')}/${String(jstDate.getDate()).padStart(2, '0')}`;
+          const dur = log.duration || 0;
+          const key = `${log.user.name}|${dateKey}|${log.categoryNameSnapshot}`;
+
+          const existing = aggregated.get(key);
+          if (existing) {
+            existing.seconds += dur;
+          } else {
+            aggregated.set(key, { user: log.user.name, date: dateKey, category: log.categoryNameSnapshot, seconds: dur });
+          }
+        }
+
+        // Group by user then date
+        const byUser = new Map<string, Map<string, { category: string; seconds: number }[]>>();
+        for (const entry of aggregated.values()) {
+          if (!byUser.has(entry.user)) byUser.set(entry.user, new Map());
+          const userMap = byUser.get(entry.user)!;
+          if (!userMap.has(entry.date)) userMap.set(entry.date, []);
+          userMap.get(entry.date)!.push({ category: entry.category, seconds: entry.seconds });
+        }
+
+        const header = multiUser ? ['ユーザー', '日付', '業務内容', '合計時間'] : ['日付', '業務内容', '合計時間'];
+        const rows: string[][] = [];
+        let grandTotal = 0;
+
+        const sortedUsers = Array.from(byUser.keys()).sort();
+        for (const userName of sortedUsers) {
+          const dateMap = byUser.get(userName)!;
+          const sortedDates = Array.from(dateMap.keys()).sort();
+          let userTotal = 0;
+
+          for (const date of sortedDates) {
+            const entries = dateMap.get(date)!;
+            let dayTotal = 0;
+
+            for (const e of entries) {
+              const row = multiUser
+                ? [userName, date, `"${e.category.replace(/"/g, '""')}"`, formatDurationHm(e.seconds)]
+                : [date, `"${e.category.replace(/"/g, '""')}"`, formatDurationHm(e.seconds)];
+              rows.push(row);
+              dayTotal += e.seconds;
+            }
+
+            const subtotalRow = multiUser
+              ? [userName, date, '小計', formatDurationHm(dayTotal)]
+              : [date, '小計', formatDurationHm(dayTotal)];
+            rows.push(subtotalRow);
+            rows.push([]); // blank line
+            userTotal += dayTotal;
+          }
+
+          if (multiUser) {
+            rows.push([userName, '', 'ユーザー小計', formatDurationHm(userTotal)]);
+            rows.push([]);
+          }
+          grandTotal += userTotal;
+        }
+
+        const totalRow = multiUser
+          ? ['総合計', '', '', formatDurationHm(grandTotal)]
+          : ['総合計', '', formatDurationHm(grandTotal)];
+        rows.push(totalRow);
+
+        const csvContent = bom + [header.join(','), ...rows.map(r => r.join(','))].join('\n');
+
+        const startStr = customStartDate || new Date().toISOString().slice(0, 10);
+        const endStr = customEndDate || startStr;
+        const filename = `zimmeter_admin_${startStr.replace(/-/g, '')}-${endStr.replace(/-/g, '')}_summary.csv`;
+        downloadCsvBlob(csvContent, filename);
+
+      } else {
+        // Detail mode (existing)
+        const header = ["Time", "User", "Role", "UID", "Daily Status", "Task", "備考", "Type", "Mod Time", "Duration"];
+
+        const rows = logs.map(log => {
+          const dateObj = new Date(log.startTime);
+          const jstDate = new Date(dateObj.toLocaleString("en-US", { timeZone: "Asia/Tokyo" }));
+          const y = jstDate.getFullYear();
+          const m = String(jstDate.getMonth() + 1).padStart(2, '0');
+          const d = String(jstDate.getDate()).padStart(2, '0');
+          const dateKey = `${y}-${m}-${d}`;
+
+          const status = dailyStatuses?.find(s => s.userId === log.userId && s.date === dateKey);
+
+          let statusStr = '-';
+          if (status) {
+              const dateShort = `${Number(m)}.${Number(d)}`;
+              if (status.isFixed) statusStr = `${dateShort} 退社済(補正済)`;
+              else if (status.hasLeft) statusStr = `${dateShort} 退社済`;
+              else statusStr = `${dateShort} 未退社`;
+          } else {
+              const now = new Date();
+              const jstNow = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Tokyo" }));
+              if (y === jstNow.getFullYear() && Number(m) === jstNow.getMonth()+1 && Number(d) === jstNow.getDate()) {
+                  statusStr = '勤務中';
+              } else {
+                  const dateShort = `${Number(m)}.${Number(d)}`;
+                  statusStr = `${dateShort} 未退社`;
+              }
+          }
+
+          let typeLabel = '通常';
+          let modTimeStr = '-';
+
+          if (log.isManual) {
+              if (log.isEdited) {
+                  typeLabel = '作成済(変更済)';
+                  modTimeStr = new Date(log.updatedAt).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' });
+              } else {
+                  typeLabel = '作成済';
+                  modTimeStr = new Date(log.updatedAt).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' });
+              }
+          } else if (log.isEdited) {
+              typeLabel = '変更済';
+              modTimeStr = new Date(log.updatedAt).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' });
+          }
+
+          return [
+            new Date(log.startTime).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }),
+            log.user.name,
+            log.user.role,
+            log.user.uid,
+            statusStr,
+            `"${log.categoryNameSnapshot.replace(/"/g, '""')}"`,
+            `"${(log.note || '').replace(/"/g, '""')}"`,
+            typeLabel,
+            modTimeStr,
+            log.duration ? `${Math.floor(log.duration / 60)}m` : 'Running'
+          ];
+        });
+
+        const csvContent = bom + [header.join(','), ...rows.map(r => r.join(','))].join('\n');
+        const dateStr = new Date().toISOString().slice(0, 10);
+        downloadCsvBlob(csvContent, `monitor_logs_${dateStr}.csv`);
+      }
 
     } catch (error) {
       console.error('CSV generation failed:', error);
@@ -420,7 +506,31 @@ export const MonitorTable = ({ selectedUsers = [], timeRange = 'daily', customSt
 
         <div className="p-4 border-t border-gray-100 bg-gray-50 shrink-0">
           <div className="flex items-center justify-between">
-            <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider">レポート出力</h4>
+            <div className="flex items-center gap-4">
+              <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider">レポート出力</h4>
+              <div className="flex gap-3">
+                <label className="flex items-center gap-1 text-xs cursor-pointer">
+                  <input
+                    type="radio"
+                    name="monitor-csv-mode"
+                    checked={csvMode === 'detail'}
+                    onChange={() => setCsvMode('detail')}
+                    className="accent-green-600"
+                  />
+                  <span className="text-gray-600">明細</span>
+                </label>
+                <label className="flex items-center gap-1 text-xs cursor-pointer">
+                  <input
+                    type="radio"
+                    name="monitor-csv-mode"
+                    checked={csvMode === 'summary'}
+                    onChange={() => setCsvMode('summary')}
+                    className="accent-green-600"
+                  />
+                  <span className="text-gray-600">集計</span>
+                </label>
+              </div>
+            </div>
             <button
               onClick={handleDownloadCsv}
               disabled={!logs || logs.length === 0}

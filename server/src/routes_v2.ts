@@ -224,120 +224,221 @@ const getJstDateStr = (date: Date = new Date()) => {
   return jst.toISOString().split('T')[0];
 };
 
+// Helper: Convert JST date string (YYYY-MM-DD) to UTC Date range start
+const jstDateToUtcStart = (dateStr: string): Date => {
+  // dateStr is YYYY-MM-DD in JST → convert to UTC by subtracting 9 hours
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const jst = new Date(Date.UTC(y, m - 1, d, 0, 0, 0));
+  return new Date(jst.getTime() - 9 * 60 * 60 * 1000);
+};
+
+// Helper: Convert JST date string (YYYY-MM-DD) to UTC Date range end (next day start)
+const jstDateToUtcEnd = (dateStr: string): Date => {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const jst = new Date(Date.UTC(y, m - 1, d + 1, 0, 0, 0));
+  return new Date(jst.getTime() - 9 * 60 * 60 * 1000);
+};
+
+// Helper: Format duration seconds to "XhYYm"
+const formatDuration = (seconds: number): string => {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  return `${h}h${String(m).padStart(2, '0')}m`;
+};
+
 // GET /api/export/csv
-// 当日の履歴をCSVでダウンロード
+// 履歴をCSVでダウンロード（日付範囲・明細/集計対応）
 router.get('/export/csv', async (req: Request, res: Response) => {
   try {
     const currentUser = getUser(req);
+    const mode = (req.query.mode as string) || 'detail';
+    const startParam = req.query.start as string | undefined;
+    const endParam = req.query.end as string | undefined;
 
-    // Get today's logs (same logic as /logs/history)
-    const now = new Date();
-    const jstTime = new Date(now.getTime() + 9 * 60 * 60 * 1000);
-    jstTime.setUTCHours(0, 0, 0, 0);
-    const today = new Date(jstTime.getTime() - 9 * 60 * 60 * 1000);
+    // Determine date range
+    let rangeStart: Date;
+    let rangeEnd: Date;
+
+    if (startParam && endParam) {
+      rangeStart = jstDateToUtcStart(startParam);
+      rangeEnd = jstDateToUtcEnd(endParam);
+    } else {
+      // Default: today
+      const now = new Date();
+      const jstTime = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+      jstTime.setUTCHours(0, 0, 0, 0);
+      rangeStart = new Date(jstTime.getTime() - 9 * 60 * 60 * 1000);
+      const jstEnd = new Date(jstTime.getTime() + 24 * 60 * 60 * 1000);
+      rangeEnd = new Date(jstEnd.getTime() - 9 * 60 * 60 * 1000);
+    }
 
     const logs = await prisma.workLog.findMany({
       where: {
         userId: currentUser.id,
-        startTime: { gte: today },
+        startTime: { gte: rangeStart, lt: rangeEnd },
       },
       orderBy: { startTime: 'asc' },
       include: { category: true }
     });
 
-    // Calculate durations and format logs
-    const formattedLogs = logs.map((log, index) => {
-      let endTime = log.endTime;
-      let duration = log.duration;
-
-      const nextLog = logs[index + 1];
-      if (nextLog) {
-        endTime = nextLog.startTime;
-        duration = Math.floor((new Date(endTime).getTime() - new Date(log.startTime).getTime()) / 1000);
-      } else if (endTime) {
-         duration = duration ?? Math.floor((new Date(endTime).getTime() - new Date(log.startTime).getTime()) / 1000);
-      }
-
-      // Determine Type Label
-      let typeLabel = '通常';
-      let modTimeStr = '-';
-
-      if (log.isManual) {
-        if (log.isEdited) {
-            typeLabel = '作成済(変更済)';
-            modTimeStr = new Date(log.updatedAt).toLocaleTimeString('ja-JP', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit' });
-        } else {
-            typeLabel = '作成済';
-            modTimeStr = new Date(log.updatedAt).toLocaleTimeString('ja-JP', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit' });
-        }
-      } else if (log.isEdited) {
-        typeLabel = '変更済';
-        modTimeStr = new Date(log.updatedAt).toLocaleTimeString('ja-JP', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit' });
-      }
-
-      const durationStr = duration ? 
-        `${Math.floor(duration / 3600)}h ${Math.floor((duration % 3600) / 60)}m` : '-';
-
-      return {
-        start: new Date(log.startTime).toLocaleTimeString('ja-JP', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit' }),
-        end: endTime ? new Date(endTime).toLocaleTimeString('ja-JP', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit' }) : '進行中',
-        task: log.categoryNameSnapshot,
-        note: log.note || '',
-        type: typeLabel,
-        modTime: modTimeStr,
-        duration: durationStr
-      };
-    });
-
-    // Generate CSV Content
-    const header = ['開始', '終了', '業務内容', '備考', 'タイプ', '変更時間', '時間'];
-    const rows = formattedLogs.map(l => [
-        l.start,
-        l.end,
-        `"${l.task.replace(/"/g, '""')}"`, // Escape quotes
-        `"${l.note.replace(/"/g, '""')}"`,
-        l.type,
-        l.modTime,
-        l.duration
-    ]);
-
-    // Add BOM for Excel compatibility (UTF-8)
     const bom = '\uFEFF';
-    const csvContent = bom + [
+    const startStr = startParam || getJstDateStr();
+    const endStr = endParam || getJstDateStr();
+
+    if (mode === 'summary') {
+      // Summary mode: group by date x category
+      const dayMap = new Map<string, Map<string, number>>();
+
+      for (const log of logs) {
+        const dateStr = new Date(new Date(log.startTime).getTime() + 9 * 60 * 60 * 1000)
+          .toISOString().split('T')[0];
+
+        if (!dayMap.has(dateStr)) dayMap.set(dateStr, new Map());
+        const catMap = dayMap.get(dateStr)!;
+
+        // Calculate duration
+        let dur = log.duration || 0;
+        const logIdx = logs.indexOf(log);
+        const nextLog = logs[logIdx + 1];
+        if (nextLog && nextLog.userId === log.userId) {
+          const nextDate = new Date(new Date(nextLog.startTime).getTime() + 9 * 60 * 60 * 1000)
+            .toISOString().split('T')[0];
+          if (nextDate === dateStr) {
+            dur = Math.floor((new Date(nextLog.startTime).getTime() - new Date(log.startTime).getTime()) / 1000);
+          }
+        }
+        if (!dur && log.endTime) {
+          dur = Math.floor((new Date(log.endTime).getTime() - new Date(log.startTime).getTime()) / 1000);
+        }
+
+        const catName = log.categoryNameSnapshot;
+        catMap.set(catName, (catMap.get(catName) || 0) + dur);
+      }
+
+      const header = ['日付', '業務内容', '合計時間'];
+      const rows: string[][] = [];
+      let grandTotal = 0;
+
+      const sortedDates = Array.from(dayMap.keys()).sort();
+      for (const date of sortedDates) {
+        const catMap = dayMap.get(date)!;
+        let dayTotal = 0;
+        const fmtDate = date.replace(/-/g, '/');
+
+        for (const [cat, seconds] of catMap) {
+          rows.push([fmtDate, `"${cat.replace(/"/g, '""')}"`, formatDuration(seconds)]);
+          dayTotal += seconds;
+        }
+        rows.push([fmtDate, '小計', formatDuration(dayTotal)]);
+        rows.push([]); // empty line between days
+        grandTotal += dayTotal;
+      }
+
+      rows.push(['総合計', '', formatDuration(grandTotal)]);
+
+      const csvContent = bom + [
         header.join(','),
         ...rows.map(r => r.join(','))
-    ].join('\n');
+      ].join('\n');
 
-    // Total Time
-    const totalSeconds = logs.reduce((acc, log, index) => {
-        let dur = log.duration || 0;
-        if (!log.endTime && logs[index+1]) {
-             dur = Math.floor((new Date(logs[index+1].startTime).getTime() - new Date(log.startTime).getTime()) / 1000);
-        } else if (log.endTime) {
-             dur = Math.floor((new Date(log.endTime).getTime() - new Date(log.startTime).getTime()) / 1000);
+      const filename = `zimmeter_${startStr.replace(/-/g, '')}-${endStr.replace(/-/g, '')}_summary.csv`;
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.send(csvContent);
+
+    } else {
+      // Detail mode
+      const formattedLogs = logs.map((log, index) => {
+        let endTime = log.endTime;
+        let duration = log.duration;
+
+        const nextLog = logs[index + 1];
+        if (nextLog) {
+          endTime = nextLog.startTime;
+          duration = Math.floor((new Date(endTime).getTime() - new Date(log.startTime).getTime()) / 1000);
+        } else if (endTime) {
+          duration = duration ?? Math.floor((new Date(endTime).getTime() - new Date(log.startTime).getTime()) / 1000);
         }
-        return acc + dur;
-    }, 0);
 
-    const totalH = Math.floor(totalSeconds / 3600);
-    const totalM = Math.floor((totalSeconds % 3600) / 60);
-    
-    const footer = `\n,,,,,合計: ${totalH}時間 ${totalM}分`;
-    
-    const finalCsv = csvContent + footer;
+        let typeLabel = '通常';
+        if (log.isManual) {
+          typeLabel = log.isEdited ? '作成済(変更済)' : '作成済';
+        } else if (log.isEdited) {
+          typeLabel = '変更済';
+        }
 
-    // Response headers
-    const filename = `daily_report_${new Date().toISOString().split('T')[0]}.csv`;
-    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        const durationStr = duration ? formatDuration(duration) : '-';
 
-    res.send(finalCsv);
+        const logDate = new Date(new Date(log.startTime).getTime() + 9 * 60 * 60 * 1000)
+          .toISOString().split('T')[0].replace(/-/g, '/');
+
+        return {
+          date: logDate,
+          start: new Date(log.startTime).toLocaleTimeString('ja-JP', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit' }),
+          end: endTime ? new Date(endTime).toLocaleTimeString('ja-JP', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit' }) : '進行中',
+          task: log.categoryNameSnapshot,
+          note: log.note || '',
+          type: typeLabel,
+          duration: durationStr
+        };
+      });
+
+      const header = ['日付', '開始', '終了', '業務内容', '備考', 'タイプ', '時間'];
+      const rows = formattedLogs.map(l => [
+        l.date,
+        l.start,
+        l.end,
+        `"${l.task.replace(/"/g, '""')}"`,
+        `"${l.note.replace(/"/g, '""')}"`,
+        l.type,
+        l.duration
+      ]);
+
+      const csvContent = bom + [
+        header.join(','),
+        ...rows.map(r => r.join(','))
+      ].join('\n');
+
+      const filename = `zimmeter_${startStr.replace(/-/g, '')}-${endStr.replace(/-/g, '')}_detail.csv`;
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.send(csvContent);
+    }
 
   } catch (error) {
     console.error(error);
     if (!res.headersSent) {
         res.status(500).json({ error: 'Failed to export CSV' });
     }
+  }
+});
+
+// GET /api/export/csv/check
+// 指定期間にデータがあるかチェック
+router.get('/export/csv/check', async (req: Request, res: Response) => {
+  try {
+    const currentUser = getUser(req);
+    const startParam = req.query.start as string;
+    const endParam = req.query.end as string;
+
+    if (!startParam || !endParam) {
+      return res.json({ hasData: false, count: 0 });
+    }
+
+    const count = await prisma.workLog.count({
+      where: {
+        userId: currentUser.id,
+        startTime: {
+          gte: jstDateToUtcStart(startParam),
+          lt: jstDateToUtcEnd(endParam),
+        },
+      },
+    });
+
+    res.json({ hasData: count > 0, count });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to check data' });
   }
 });
 

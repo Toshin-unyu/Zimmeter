@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { QueryClient, QueryClientProvider, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Download, History, AlertCircle, Pencil, Square, LogOut, RotateCcw, Menu, X, FileText } from 'lucide-react';
+import { History, AlertCircle, Pencil, Square, LogOut, RotateCcw, Menu, X, FileText, Download } from 'lucide-react';
 import { getCategoryColor } from './lib/constants';
 import type { Category } from './lib/constants';
 import { api } from './lib/axios';
@@ -19,6 +19,7 @@ import { useUserStatus } from './hooks/useUserStatus';
 import { useTimer } from './hooks/useTimer';
 import { AdminPage } from './pages/AdminPage';
 import { ToastProvider, useToast } from './context/ToastContext';
+import { DesktopExportPopover, MobileExportSheet } from './components/ExportPopover';
 
 const queryClient = new QueryClient();
 
@@ -69,6 +70,7 @@ function ZimmeterApp() {
   const [historyFilterCategoryId, setHistoryFilterCategoryId] = useState<number | null>(null);
   const [showUserCard, setShowUserCard] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [showMobileExport, setShowMobileExport] = useState(false);
   const [showChangelog, setShowChangelog] = useState(false);
   const mobileMenuRef = useRef<HTMLDivElement>(null);
 
@@ -512,15 +514,7 @@ function ZimmeterApp() {
                         >
                             <History size={20} />
                         </button>
-                        <a
-                            href={`${api.defaults.baseURL}/export/csv?uid=${uid}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="p-2 text-gray-600 hover:bg-gray-100 rounded-md transition-colors"
-                            title="CSVエクスポート"
-                        >
-                            <Download size={20} />
-                        </a>
+                        <DesktopExportPopover uid={uid} />
                         <button
                             onClick={() => setShowChangelog(true)}
                             className="p-2 text-gray-600 hover:bg-gray-100 rounded-md transition-colors"
@@ -603,16 +597,13 @@ function ZimmeterApp() {
                                 <History size={18} />
                                 履歴
                             </button>
-                            <a
-                                href={`${api.defaults.baseURL}/export/csv?uid=${uid}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
+                            <button
+                                onClick={() => { setMobileMenuOpen(false); setShowMobileExport(true); }}
                                 className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                                onClick={() => setMobileMenuOpen(false)}
                             >
                                 <Download size={18} />
-                                CSVエクスポート
-                            </a>
+                                CSV出力
+                            </button>
                             <button
                                 onClick={() => { setShowChangelog(true); setMobileMenuOpen(false); }}
                                 className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
@@ -875,6 +866,10 @@ function ZimmeterApp() {
             isOpen={showChangelog}
             onClose={() => setShowChangelog(false)}
         />
+
+        {showMobileExport && (
+            <MobileExportSheet uid={uid} onClose={() => setShowMobileExport(false)} />
+        )}
 
         {showIdleAlert && !activeLogQuery.data && !showLoginModal && !hasLeftWork && (
             <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 pointer-events-none transition-opacity duration-500">
