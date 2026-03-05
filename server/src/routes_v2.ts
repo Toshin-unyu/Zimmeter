@@ -40,7 +40,7 @@ router.post('/logs/manual', async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Unauthorized', message: 'Missing user context (x-user-id header or uid query param)' });
     }
     const currentUser = req.user;
-    const { categoryId, startTime, note } = req.body;
+    const { categoryId, startTime, endTime: endTimeParam, note } = req.body;
 
     if (!categoryId || !startTime) {
       return res.status(400).json({ error: 'Missing categoryId/startTime' });
@@ -51,27 +51,30 @@ router.post('/logs/manual', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Invalid startTime' });
     }
 
-    // 当日の最後の履歴を取得して、その startTime を endTime とする
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const lastLog = await prisma.workLog.findFirst({
-      where: {
-        userId: currentUser.id,
-        startTime: { gte: today },
-      },
-      orderBy: { startTime: 'desc' },
-    });
-
     const now = new Date();
     if (now.getTime() <= start.getTime()) {
       return res.status(400).json({ error: 'startTime must be before current time' });
     }
 
-    // Set endTime same as startTime for manual logs to mark them as closed.
-    // The actual duration/endTime displayed in history is recalculated dynamically based on the next log.
-    // This prevents "active" log detection issues (endTime: null) and invalid durations.
-    const end = start; 
-    const duration = 0;
+    let end: Date;
+    let duration: number;
+
+    if (endTimeParam) {
+      const endDate = new Date(endTimeParam);
+      if (Number.isNaN(endDate.getTime())) {
+        return res.status(400).json({ error: 'Invalid endTime' });
+      }
+      if (endDate.getTime() <= start.getTime()) {
+        return res.status(400).json({ error: 'endTime must be after startTime' });
+      }
+      end = endDate;
+      duration = Math.floor((end.getTime() - start.getTime()) / 1000);
+    } else {
+      // Set endTime same as startTime for manual logs to mark them as closed.
+      // The actual duration/endTime displayed in history is recalculated dynamically based on the next log.
+      end = start;
+      duration = 0;
+    }
 
     const category = await prisma.category.findUnique({
       where: { id: Number(categoryId) },

@@ -28,6 +28,7 @@ export const EditLogModal = ({ isOpen, onClose, mode, log, categories, uid, init
   const { showToast } = useToast();
   const [selectedCatId, setSelectedCatId] = useState<number | null>(null);
   const [startTimeStr, setStartTimeStr] = useState<string>(''); // HH:mm for create
+  const [endTimeStr, setEndTimeStr] = useState<string>(''); // HH:mm for create (optional)
   const [editStartTimeStr, setEditStartTimeStr] = useState<string>('');
   const [editEndTimeStr, setEditEndTimeStr] = useState<string>('');
   const [noteStr, setNoteStr] = useState('');
@@ -57,6 +58,7 @@ export const EditLogModal = ({ isOpen, onClose, mode, log, categories, uid, init
       const hh = pad(now.getHours());
       const mm = pad(now.getMinutes());
       setStartTimeStr(`${hh}:${mm}`);
+      setEndTimeStr('');
       setNoteStr('');
     }
   }, [isOpen, mode, log, initialCategoryId]);
@@ -81,7 +83,7 @@ export const EditLogModal = ({ isOpen, onClose, mode, log, categories, uid, init
   });
 
   const createMutation = useMutation({
-    mutationFn: async (data: { categoryId: number; startTime: string; note?: string }) => {
+    mutationFn: async (data: { categoryId: number; startTime: string; endTime?: string; note?: string }) => {
       return api.post('/logs/manual', data);
     },
     onSuccess: () => {
@@ -153,11 +155,28 @@ export const EditLogModal = ({ isOpen, onClose, mode, log, categories, uid, init
     const start = new Date(today);
     start.setHours(sh, sm, 0, 0);
 
-    createMutation.mutate({
+    const payload: { categoryId: number; startTime: string; endTime?: string; note?: string } = {
       categoryId: selectedCatId,
       startTime: start.toISOString(),
       note: noteStr,
-    });
+    };
+
+    if (endTimeStr) {
+      const [eh, em] = endTimeStr.split(':').map(Number);
+      if ([eh, em].some(v => Number.isNaN(v))) {
+        showToast('終了時刻を正しく入力してください', 'error');
+        return;
+      }
+      const end = new Date(today);
+      end.setHours(eh, em, 0, 0);
+      if (end <= start) {
+        showToast('終了時刻は開始時刻より後にしてください', 'error');
+        return;
+      }
+      payload.endTime = end.toISOString();
+    }
+
+    createMutation.mutate(payload);
   };
 
   if (!isOpen || (mode === 'edit' && !log)) return null;
@@ -201,14 +220,27 @@ export const EditLogModal = ({ isOpen, onClose, mode, log, categories, uid, init
 
         {mode === 'create' && (
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-600 mb-1">開始時刻</label>
-            <input
-              type="time"
-              value={startTimeStr}
-              onChange={(e) => setStartTimeStr(e.target.value)}
-              className="w-full p-2 border rounded-lg bg-white"
-            />
-            <p className="text-xs text-gray-500 mt-1">前の項目の開始時間との差が計算時間になります</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-600 mb-1">開始時刻</label>
+                <input
+                  type="time"
+                  value={startTimeStr}
+                  onChange={(e) => setStartTimeStr(e.target.value)}
+                  className="w-full p-2 border rounded-lg bg-white"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-600 mb-1">終了時刻 <span className="text-gray-400 font-normal">(任意)</span></label>
+                <input
+                  type="time"
+                  value={endTimeStr}
+                  onChange={(e) => setEndTimeStr(e.target.value)}
+                  className="w-full p-2 border rounded-lg bg-white"
+                />
+              </div>
+            </div>
+            <p className="text-xs text-gray-500 mt-1">終了時刻を指定すると、途中割り込みとして前後の時間が自動調整されます</p>
           </div>
         )}
         

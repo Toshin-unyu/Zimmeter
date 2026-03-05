@@ -780,6 +780,7 @@ function ZimmeterApp() {
                       logs={historyQuery.data || []}
                       mergedCategories={categoriesQuery.data?.reduce((acc, c) => ({...acc, [c.id]: c}), {}) || {}}
                       onItemDoubleClick={handleHistoryDoubleClick}
+                      onEdit={(log) => setEditingLog(log)}
                     />
                 </>
             )}

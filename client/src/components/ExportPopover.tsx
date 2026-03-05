@@ -278,8 +278,7 @@ interface ExportPanelProps {
 const ExportPanel = ({ uid, onDone, compact = false }: ExportPanelProps) => {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [wantDetail, setWantDetail] = useState(true);
-  const [wantSummary, setWantSummary] = useState(false);
+  const [mode, setMode] = useState<'detail' | 'summary'>('detail');
   const [hasData, setHasData] = useState<boolean | null>(null);
   const [checking, setChecking] = useState(false);
 
@@ -288,8 +287,7 @@ const ExportPanel = ({ uid, onDone, compact = false }: ExportPanelProps) => {
   // Single day: force detail only
   useEffect(() => {
     if (singleDay) {
-      setWantDetail(true);
-      setWantSummary(false);
+      setMode('detail');
     }
   }, [singleDay]);
 
@@ -316,33 +314,17 @@ const ExportPanel = ({ uid, onDone, compact = false }: ExportPanelProps) => {
   };
 
   const handleDownload = () => {
-    const base = `${api.defaults.baseURL}/export/csv?uid=${uid}&start=${startDate}&end=${endDate}`;
-    const triggerDownload = (url: string) => {
-      const a = document.createElement('a');
-      a.href = url;
-      a.style.display = 'none';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-    };
-    const needsBoth = wantDetail && wantSummary && !singleDay;
-    if (wantDetail) triggerDownload(`${base}&mode=detail`);
-    if (wantSummary && !singleDay) {
-      if (needsBoth) {
-        setTimeout(() => {
-          triggerDownload(`${base}&mode=summary`);
-          onDone?.();
-        }, 300);
-        return;
-      } else {
-        triggerDownload(`${base}&mode=summary`);
-      }
-    }
+    const url = `${api.defaults.baseURL}/export/csv?uid=${uid}&start=${startDate}&end=${endDate}&mode=${mode}`;
+    const a = document.createElement('a');
+    a.href = url;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
     onDone?.();
   };
 
-  const hasSelection = wantDetail || wantSummary;
-  const canDownload = !!(startDate && endDate && hasSelection && hasData && !checking);
+  const canDownload = !!(startDate && endDate && hasData && !checking);
 
   const btnSize = compact ? 'text-xs' : 'text-sm';
   const py = compact ? 'py-1' : 'py-1.5';
@@ -371,35 +353,29 @@ const ExportPanel = ({ uid, onDone, compact = false }: ExportPanelProps) => {
         />
       </div>
 
-      {/* Mode selection: checkbox for multi-day, forced detail for single day */}
+      {/* Mode selection: radio for multi-day, forced detail for single day */}
       <div className="flex gap-4 mb-3">
-        {singleDay ? (
-          <label className={`flex items-center gap-1.5 ${btnSize}`}>
-            <input type="checkbox" checked readOnly className="accent-blue-600" />
-            <span className="text-blue-700 font-medium">明細</span>
-          </label>
-        ) : (
-          <>
-            <label className={`flex items-center gap-1.5 ${btnSize} cursor-pointer`}>
-              <input
-                type="checkbox"
-                checked={wantDetail}
-                onChange={() => setWantDetail(!wantDetail)}
-                className="accent-blue-600"
-              />
-              <span className="text-gray-700">明細</span>
-            </label>
-            <label className={`flex items-center gap-1.5 ${btnSize} cursor-pointer`}>
-              <input
-                type="checkbox"
-                checked={wantSummary}
-                onChange={() => setWantSummary(!wantSummary)}
-                className="accent-blue-600"
-              />
-              <span className="text-gray-700">集計</span>
-            </label>
-          </>
-        )}
+        <label className={`flex items-center gap-1.5 ${btnSize} ${singleDay ? '' : 'cursor-pointer'}`}>
+          <input
+            type="radio"
+            name="export-mode"
+            checked={mode === 'detail'}
+            onChange={() => setMode('detail')}
+            className="accent-blue-600"
+          />
+          <span className={mode === 'detail' ? 'text-blue-700 font-medium' : 'text-gray-700'}>明細</span>
+        </label>
+        <label className={`flex items-center gap-1.5 ${btnSize} ${singleDay ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}>
+          <input
+            type="radio"
+            name="export-mode"
+            checked={mode === 'summary'}
+            onChange={() => setMode('summary')}
+            disabled={singleDay}
+            className="accent-blue-600"
+          />
+          <span className={mode === 'summary' ? 'text-blue-700 font-medium' : 'text-gray-700'}>集計</span>
+        </label>
       </div>
 
       {/* Status message */}
@@ -418,7 +394,7 @@ const ExportPanel = ({ uid, onDone, compact = false }: ExportPanelProps) => {
         }`}
       >
         <Download size={compact ? 18 : 16} />
-        ダウンロード{wantDetail && wantSummary && !singleDay ? ' (2件)' : ''}
+        ダウンロード
       </button>
     </>
   );

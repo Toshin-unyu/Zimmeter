@@ -1,4 +1,4 @@
-import { Clock } from 'lucide-react';
+import { Clock, Pencil } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type { Category } from '../../lib/constants';
 import { getCategoryStyle } from '../../lib/utils';
@@ -13,6 +13,7 @@ interface WorkLog {
   duration?: number | null;
   isManual?: boolean;
   isEdited?: boolean;
+  note?: string | null;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -21,9 +22,10 @@ interface TodayHistoryBarProps {
   logs: WorkLog[];
   mergedCategories: Record<number, Category>;
   onItemDoubleClick?: (categoryId: number) => void;
+  onEdit?: (log: WorkLog) => void;
 }
 
-export const TodayHistoryBar = ({ logs, mergedCategories, onItemDoubleClick }: TodayHistoryBarProps) => {
+export const TodayHistoryBar = ({ logs, mergedCategories, onItemDoubleClick, onEdit }: TodayHistoryBarProps) => {
   const [nowMs, setNowMs] = useState(() => Date.now());
 
   useEffect(() => {
@@ -106,7 +108,7 @@ export const TodayHistoryBar = ({ logs, mergedCategories, onItemDoubleClick }: T
       const gapStartMs = new Date(log.endTime).getTime();
       const gapEndMs = new Date(next.startTime).getTime();
       const gapSeconds = Math.max(0, Math.floor((gapEndMs - gapStartMs) / 1000));
-      if (gapSeconds <= 0) continue;
+      if (gapSeconds < 60) continue;
 
       pushToHour(log.endTime, {
         kind: 'break',
@@ -141,7 +143,7 @@ export const TodayHistoryBar = ({ logs, mergedCategories, onItemDoubleClick }: T
       {/* 履历内容 - 始终显示 */}
       <div className="border-t border-gray-100">
         <div className="container mx-auto px-2 sm:px-4 py-3">
-          <div className="max-h-[30vh] overflow-y-auto">
+          <div className="max-h-[50vh] overflow-y-auto">
             <div className="flex flex-col gap-2">
               {hourGroups.map(group => (
                 <div key={group.hour} className="flex">
@@ -187,6 +189,19 @@ export const TodayHistoryBar = ({ logs, mergedCategories, onItemDoubleClick }: T
                               <span className="font-mono text-gray-500 shrink-0">{formatTime(log.startTime)}</span>
                               <span className="font-medium truncate">{log.categoryNameSnapshot}</span>
                               <span className="font-mono text-gray-500 shrink-0">{formatDuration(item.durationSeconds)}</span>
+                              {onEdit && (
+                                <button
+                                  onClick={e => {
+                                    e.stopPropagation();
+                                    onEdit(log);
+                                  }}
+                                  className="ml-1 p-0.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
+                                  title="修正"
+                                  type="button"
+                                >
+                                  <Pencil size={12} />
+                                </button>
+                              )}
                             </div>
                             <div className="mt-0.5 flex items-center gap-1 shrink-0">
                               {isActive && (

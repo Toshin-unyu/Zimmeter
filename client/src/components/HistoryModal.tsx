@@ -161,7 +161,7 @@ export const HistoryModal = ({
       const gapStartMs = new Date(log.endTime).getTime();
       const gapEndMs = new Date(next.startTime).getTime();
       const gapSeconds = Math.max(0, Math.floor((gapEndMs - gapStartMs) / 1000));
-      if (gapSeconds <= 0) continue;
+      if (gapSeconds < 60) continue;
 
       pushToHour(log.endTime, {
         kind: 'break',
