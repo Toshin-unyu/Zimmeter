@@ -1,5 +1,7 @@
 import { X, Pencil, Plus } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { api } from '../lib/axios';
 import type { Category } from '../lib/constants';
 import { getCategoryStyle } from '../lib/utils';
 import { LogHistoryDetail } from './LogHistoryDetail';
@@ -14,6 +16,7 @@ interface WorkLog {
   duration?: number | null;
   isManual?: boolean;
   isEdited?: boolean;
+  note?: string | null;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -44,6 +47,19 @@ export const HistoryModal = ({
   if (!isOpen) return null;
 
   const [nowMs, setNowMs] = useState(() => Date.now());
+  const [editingNoteLogId, setEditingNoteLogId] = useState<number | null>(null);
+  const [noteText, setNoteText] = useState('');
+  const queryClient = useQueryClient();
+
+  const saveNoteMutation = useMutation({
+    mutationFn: async ({ logId, note }: { logId: number; note: string }) => {
+      return api.patch(`/logs/${logId}`, { note });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['history'] });
+      setEditingNoteLogId(null);
+    },
+  });
 
   useEffect(() => {
     const id = window.setInterval(() => setNowMs(Date.now()), 30_000);
@@ -262,6 +278,53 @@ export const HistoryModal = ({
                               <Pencil size={14} />
                             </button>
                           </div>
+
+                          {/* メモ表示・編集 */}
+                          {editingNoteLogId === log.id ? (
+                            <div className="mt-0.5">
+                              <textarea
+                                autoFocus
+                                rows={2}
+                                className="w-full text-[10px] p-1 border border-blue-300 rounded resize-none focus:outline-none focus:ring-1 focus:ring-blue-400"
+                                value={noteText}
+                                onChange={e => setNoteText(e.target.value)}
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter' && !e.shiftKey) {
+                                    e.preventDefault();
+                                    saveNoteMutation.mutate({ logId: log.id, note: noteText });
+                                  }
+                                  if (e.key === 'Escape') {
+                                    setEditingNoteLogId(null);
+                                  }
+                                }}
+                                onBlur={() => saveNoteMutation.mutate({ logId: log.id, note: noteText })}
+                                placeholder="メモを入力... (Enter で保存)"
+                              />
+                            </div>
+                          ) : log.note ? (
+                            <div
+                              className="mt-0.5 text-[10px] text-gray-400 cursor-pointer hover:text-gray-600 truncate max-w-[20rem]"
+                              title={log.note}
+                              onClick={e => {
+                                e.stopPropagation();
+                                setEditingNoteLogId(log.id);
+                                setNoteText(log.note || '');
+                              }}
+                            >
+                              {log.note}
+                            </div>
+                          ) : (
+                            <div
+                              className="mt-0.5 text-[10px] text-blue-400 cursor-pointer hover:text-blue-600"
+                              onClick={e => {
+                                e.stopPropagation();
+                                setEditingNoteLogId(log.id);
+                                setNoteText('');
+                              }}
+                            >
+                              + メモを追加
+                            </div>
+                          )}
 
                           <div className="mt-0.5 flex items-center gap-1 shrink-0">
                             {isActive && (

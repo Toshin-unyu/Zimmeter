@@ -35,6 +35,7 @@ const changeLabel: Record<string, string> = {
   startTime: '開始',
   endTime: '終了',
   categoryId: 'カテゴリ',
+  note: 'メモ',
 };
 
 export const LogHistoryDetail = ({ logId }: LogHistoryDetailProps) => {
@@ -88,11 +89,15 @@ export const LogHistoryDetail = ({ logId }: LogHistoryDetailProps) => {
                   <div key={field} className="flex items-center gap-1">
                     <span className="text-gray-500">{changeLabel[field] || field}:</span>
                     <span className="text-red-500 line-through">
-                      {field === 'categoryId' ? change.oldName : formatTimeValue(change.old)}
+                      {field === 'categoryId' ? change.oldName
+                        : field === 'note' ? (change.old || '(なし)')
+                        : formatTimeValue(change.old)}
                     </span>
                     <span className="text-gray-400">→</span>
                     <span className="text-green-600 font-medium">
-                      {field === 'categoryId' ? change.newName : formatTimeValue(change.new)}
+                      {field === 'categoryId' ? change.newName
+                        : field === 'note' ? (change.new || '(なし)')
+                        : formatTimeValue(change.new)}
                     </span>
                   </div>
                 ))}

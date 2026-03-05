@@ -10,6 +10,7 @@ interface WorkLog {
   categoryNameSnapshot: string;
   startTime: string;
   endTime?: string | null;
+  note?: string | null;
 }
 
 interface EditLogModalProps {
@@ -29,6 +30,7 @@ export const EditLogModal = ({ isOpen, onClose, mode, log, categories, uid, init
   const [startTimeStr, setStartTimeStr] = useState<string>(''); // HH:mm for create
   const [editStartTimeStr, setEditStartTimeStr] = useState<string>('');
   const [editEndTimeStr, setEditEndTimeStr] = useState<string>('');
+  const [noteStr, setNoteStr] = useState('');
 
   useEffect(() => {
     if (!isOpen) return;
@@ -44,6 +46,7 @@ export const EditLogModal = ({ isOpen, onClose, mode, log, categories, uid, init
       } else {
         setEditEndTimeStr('');
       }
+      setNoteStr(log.note || '');
       return;
     }
 
@@ -54,11 +57,12 @@ export const EditLogModal = ({ isOpen, onClose, mode, log, categories, uid, init
       const hh = pad(now.getHours());
       const mm = pad(now.getMinutes());
       setStartTimeStr(`${hh}:${mm}`);
+      setNoteStr('');
     }
   }, [isOpen, mode, log, initialCategoryId]);
 
   const updateMutation = useMutation({
-    mutationFn: async (data: { categoryId: number; startTime?: string; endTime?: string | null }) => {
+    mutationFn: async (data: { categoryId: number; startTime?: string; endTime?: string | null; note?: string }) => {
       if (!log) return;
       return api.patch(`/logs/${log.id}`, data);
     },
@@ -77,7 +81,7 @@ export const EditLogModal = ({ isOpen, onClose, mode, log, categories, uid, init
   });
 
   const createMutation = useMutation({
-    mutationFn: async (data: { categoryId: number; startTime: string }) => {
+    mutationFn: async (data: { categoryId: number; startTime: string; note?: string }) => {
       return api.post('/logs/manual', data);
     },
     onSuccess: () => {
@@ -133,6 +137,7 @@ export const EditLogModal = ({ isOpen, onClose, mode, log, categories, uid, init
         payload.endTime = newEnd.toISOString();
       }
 
+      payload.note = noteStr;
       updateMutation.mutate(payload);
       return;
     }
@@ -151,6 +156,7 @@ export const EditLogModal = ({ isOpen, onClose, mode, log, categories, uid, init
     createMutation.mutate({
       categoryId: selectedCatId,
       startTime: start.toISOString(),
+      note: noteStr,
     });
   };
 
@@ -206,6 +212,17 @@ export const EditLogModal = ({ isOpen, onClose, mode, log, categories, uid, init
           </div>
         )}
         
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-600 mb-1">メモ <span className="text-gray-400 font-normal">(任意)</span></label>
+          <textarea
+            value={noteStr}
+            onChange={e => setNoteStr(e.target.value)}
+            rows={2}
+            className="w-full p-2 border rounded-lg bg-white resize-none text-sm"
+            placeholder="メモを入力..."
+          />
+        </div>
+
         <label className="block text-xs font-bold text-gray-500 uppercase mb-2">カテゴリ選択</label>
         <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto mb-6 p-1 border rounded bg-slate-50">
           {categories.map(cat => (

@@ -40,7 +40,7 @@ router.post('/logs/manual', async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Unauthorized', message: 'Missing user context (x-user-id header or uid query param)' });
     }
     const currentUser = req.user;
-    const { categoryId, startTime } = req.body;
+    const { categoryId, startTime, note } = req.body;
 
     if (!categoryId || !startTime) {
       return res.status(400).json({ error: 'Missing categoryId/startTime' });
@@ -90,6 +90,7 @@ router.post('/logs/manual', async (req: Request, res: Response) => {
         endTime: end,
         duration,
         isManual: true, // 手動作成
+        note: note ? (note === '' ? null : note) : null,
       },
     });
 
@@ -281,6 +282,7 @@ router.get('/export/csv', async (req: Request, res: Response) => {
         start: new Date(log.startTime).toLocaleTimeString('ja-JP', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit' }),
         end: endTime ? new Date(endTime).toLocaleTimeString('ja-JP', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit' }) : '進行中',
         task: log.categoryNameSnapshot,
+        note: log.note || '',
         type: typeLabel,
         modTime: modTimeStr,
         duration: durationStr
@@ -288,11 +290,12 @@ router.get('/export/csv', async (req: Request, res: Response) => {
     });
 
     // Generate CSV Content
-    const header = ['開始', '終了', '業務内容', 'タイプ', '変更時間', '時間'];
+    const header = ['開始', '終了', '業務内容', '備考', 'タイプ', '変更時間', '時間'];
     const rows = formattedLogs.map(l => [
         l.start,
         l.end,
         `"${l.task.replace(/"/g, '""')}"`, // Escape quotes
+        `"${l.note.replace(/"/g, '""')}"`,
         l.type,
         l.modTime,
         l.duration
@@ -1043,7 +1046,7 @@ router.patch('/logs/:id', async (req: Request, res: Response) => {
   try {
     const currentUser = getUser(req);
     const { id } = req.params;
-    const { categoryId, startTime, endTime } = req.body;
+    const { categoryId, startTime, endTime, note } = req.body;
 
     const log = await prisma.workLog.findUnique({ where: { id: Number(id) } });
     if (!log) return res.status(404).json({ error: 'Log not found' });
@@ -1055,9 +1058,12 @@ router.patch('/logs/:id', async (req: Request, res: Response) => {
 
     console.log(`[PATCH Log ${id}] Request body:`, req.body);
 
-    const data: any = {
-        isEdited: true, // 内容変更フラグ
-    };
+    // noteのみの変更時はisEditedを変更しない
+    const hasNonNoteChanges = categoryId || startTime || endTime !== undefined;
+    const data: any = {};
+    if (hasNonNoteChanges) {
+        data.isEdited = true;
+    }
 
     if (categoryId) {
         // カテゴリ情報の取得 (スナップショット更新用)
@@ -1081,6 +1087,10 @@ router.patch('/logs/:id', async (req: Request, res: Response) => {
     } else if (endTime === null) {
         data.endTime = null;
         data.duration = null;
+    }
+
+    if (note !== undefined) {
+        data.note = note === '' ? null : note;
     }
 
     // Recalculate duration if time changed
@@ -1120,6 +1130,12 @@ router.patch('/logs/:id', async (req: Request, res: Response) => {
         oldName: log.categoryNameSnapshot,
         newName: data.categoryNameSnapshot,
       };
+    }
+    if (note !== undefined) {
+      const normalizedNote = note === '' ? null : note;
+      if (normalizedNote !== log.note) {
+        changes.note = { old: log.note || null, new: normalizedNote };
+      }
     }
 
     // トランザクションで履歴作成+ログ更新を同時実行

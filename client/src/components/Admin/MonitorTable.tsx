@@ -19,6 +19,7 @@ interface MonitorLog {
   duration?: number;
   isManual?: boolean;
   isEdited?: boolean;
+  note?: string | null;
   updatedAt: string;
 }
 
@@ -142,7 +143,7 @@ export const MonitorTable = ({ selectedUsers = [], timeRange = 'daily', customSt
 
     try {
       // Header
-      const header = ["Time", "User", "Role", "UID", "Daily Status", "Task", "Type", "Mod Time", "Duration"];
+      const header = ["Time", "User", "Role", "UID", "Daily Status", "Task", "備考", "Type", "Mod Time", "Duration"];
       
       // Rows
       const rows = logs.map(log => {
@@ -197,6 +198,7 @@ export const MonitorTable = ({ selectedUsers = [], timeRange = 'daily', customSt
           log.user.uid,
           statusStr,
           `"${log.categoryNameSnapshot.replace(/"/g, '""')}"`, // Escape CSV
+          `"${(log.note || '').replace(/"/g, '""')}"`,
           typeLabel,
           modTimeStr,
           log.duration ? `${Math.floor(log.duration / 60)}m` : 'Running'
@@ -371,6 +373,11 @@ export const MonitorTable = ({ selectedUsers = [], timeRange = 'daily', customSt
                       <span className={`font-medium ${color}`}>
                         {log.categoryNameSnapshot}
                       </span>
+                      {log.note && (
+                        <div className="text-[10px] text-gray-400 truncate max-w-[200px]" title={log.note}>
+                          {log.note}
+                        </div>
+                      )}
                     </td>
                     <td className="p-3">
                         <div className={`text-xs font-medium ${typeColor}`}>{typeLabel}</div>
