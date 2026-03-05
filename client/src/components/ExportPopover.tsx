@@ -68,6 +68,7 @@ const InlineCalendar = ({ startDate, endDate, onSelect }: InlineCalendarProps) =
     return startOfMonth(new Date());
   });
   const [activeField, setActiveField] = useState<SelectingField>('start');
+  const [hoverDate, setHoverDate] = useState<Date | null>(null);
 
   const monthStart = startOfMonth(viewMonth);
   const monthEnd = endOfMonth(viewMonth);
@@ -87,7 +88,6 @@ const InlineCalendar = ({ startDate, endDate, onSelect }: InlineCalendarProps) =
   const handleDayClick = (day: Date) => {
     const dateStr = format(day, 'yyyy-MM-dd');
     if (activeField === 'start') {
-      // Set start date; if it's after current end, also update end
       if (endDate && isAfter(day, parseISO(endDate))) {
         onSelect(dateStr, dateStr);
       } else {
@@ -95,7 +95,6 @@ const InlineCalendar = ({ startDate, endDate, onSelect }: InlineCalendarProps) =
       }
       setActiveField('end');
     } else {
-      // Set end date; if it's before current start, swap
       if (startDate && isBefore(day, parseISO(startDate))) {
         onSelect(dateStr, startDate);
       } else {
@@ -103,16 +102,49 @@ const InlineCalendar = ({ startDate, endDate, onSelect }: InlineCalendarProps) =
       }
       setActiveField('start');
     }
+    setHoverDate(null);
   };
 
+  // Compute preview range (actual range + hover extension)
+  const getPreviewRange = (): { previewStart: Date | null; previewEnd: Date | null } => {
+    if (!hoverDate || !parsedStart || !parsedEnd) {
+      return { previewStart: parsedStart, previewEnd: parsedEnd };
+    }
+    if (activeField === 'start') {
+      // Previewing new start date
+      if (isAfter(hoverDate, parsedEnd)) {
+        return { previewStart: hoverDate, previewEnd: hoverDate };
+      }
+      return { previewStart: hoverDate, previewEnd: parsedEnd };
+    } else {
+      // Previewing new end date
+      if (isBefore(hoverDate, parsedStart)) {
+        return { previewStart: hoverDate, previewEnd: parsedStart };
+      }
+      return { previewStart: parsedStart, previewEnd: hoverDate };
+    }
+  };
+
+  const { previewStart, previewEnd } = getPreviewRange();
+
   const isInRange = (day: Date) => {
-    if (!parsedStart || !parsedEnd) return false;
-    return (isAfter(day, parsedStart) || isSameDay(day, parsedStart)) &&
-           (isBefore(day, parsedEnd) || isSameDay(day, parsedEnd));
+    if (!previewStart || !previewEnd) return false;
+    return (isAfter(day, previewStart) || isSameDay(day, previewStart)) &&
+           (isBefore(day, previewEnd) || isSameDay(day, previewEnd));
   };
 
   const isStartDay = (day: Date) => parsedStart && isSameDay(day, parsedStart);
   const isEndDay = (day: Date) => parsedEnd && isSameDay(day, parsedEnd);
+  const isHoverDay = (day: Date) => hoverDate && isSameDay(day, hoverDate);
+
+  // Weekend check: Monday=0 ... Sunday=6 (our week layout)
+  const isWeekend = (day: Date) => {
+    const dow = getDay(day); // 0=Sun, 6=Sat
+    return dow === 0 || dow === 6;
+  };
+
+  const isSaturday = (day: Date) => getDay(day) === 6;
+  const isSunday = (day: Date) => getDay(day) === 0;
 
   // Sync viewMonth when startDate changes externally (from presets)
   useEffect(() => {
@@ -127,7 +159,7 @@ const InlineCalendar = ({ startDate, endDate, onSelect }: InlineCalendarProps) =
   };
 
   return (
-    <div>
+    <div onMouseLeave={() => setHoverDate(null)}>
       {/* Start / End date fields */}
       <div className="flex items-center gap-2 mb-3">
         <button
@@ -176,8 +208,15 @@ const InlineCalendar = ({ startDate, endDate, onSelect }: InlineCalendarProps) =
 
       {/* Weekday headers */}
       <div className="grid grid-cols-7 mb-1">
-        {WEEKDAYS.map(w => (
-          <div key={w} className="text-center text-[10px] font-medium text-gray-400 py-0.5">{w}</div>
+        {WEEKDAYS.map((w, i) => (
+          <div
+            key={w}
+            className={`text-center text-[10px] font-medium py-0.5 ${
+              i === 5 ? 'text-blue-400' : i === 6 ? 'text-red-400' : 'text-gray-400'
+            }`}
+          >
+            {w}
+          </div>
         ))}
       </div>
 
@@ -192,21 +231,32 @@ const InlineCalendar = ({ startDate, endDate, onSelect }: InlineCalendarProps) =
           const inRange = isInRange(day);
           const start = isStartDay(day);
           const end = isEndDay(day);
+          const hover = isHoverDay(day);
           const isToday = isSameDay(day, new Date());
           const inMonth = isSameMonth(day, viewMonth);
+          const sat = isSaturday(day);
+          const sun = isSunday(day);
+          const weekend = isWeekend(day);
+
+          // Base text color: weekend colors > default
+          let textColor = 'text-gray-700';
+          if (!inMonth) textColor = 'text-gray-300';
+          else if (sat) textColor = 'text-blue-500';
+          else if (sun) textColor = 'text-red-500';
 
           return (
             <button
               key={day.toISOString()}
               onClick={() => handleDayClick(day)}
+              onMouseEnter={() => setHoverDate(day)}
               className={`
-                text-center text-[11px] py-1 rounded transition-colors
-                ${!inMonth ? 'text-gray-300' : 'text-gray-700'}
-                ${inRange && !start && !end ? 'bg-blue-50 text-blue-700' : ''}
+                text-center text-[11px] py-1 rounded transition-colors cursor-pointer
                 ${start || end ? 'bg-blue-600 text-white font-bold' : ''}
-                ${!inRange && !start && !end ? 'hover:bg-gray-100' : ''}
-                ${isToday && !start && !end ? 'font-bold text-blue-600' : ''}
-                cursor-pointer
+                ${hover && !start && !end ? 'bg-blue-100 ring-1 ring-blue-300' : ''}
+                ${inRange && !start && !end && !hover ? 'bg-blue-50' : ''}
+                ${inRange && !start && !end ? (weekend ? (sat ? 'text-blue-600' : 'text-red-500') : 'text-blue-700') : ''}
+                ${!inRange && !start && !end && !hover ? `${textColor} hover:bg-gray-100` : ''}
+                ${isToday && !start && !end ? 'font-bold underline' : ''}
               `}
             >
               {day.getDate()}
