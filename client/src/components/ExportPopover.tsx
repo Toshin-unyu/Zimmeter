@@ -20,10 +20,6 @@ import {
 } from 'date-fns';
 import { ja } from 'date-fns/locale';
 
-interface ExportPopoverProps {
-  uid: string;
-}
-
 type DatePreset = 'today' | 'thisWeek' | 'lastWeek';
 const getPresetRange = (preset: DatePreset): { start: string; end: string } => {
   const today = new Date();
@@ -270,12 +266,11 @@ const InlineCalendar = ({ startDate, endDate, onSelect }: InlineCalendarProps) =
 
 // Shared export panel content
 interface ExportPanelProps {
-  uid: string;
   onDone?: () => void;
   compact?: boolean;
 }
 
-const ExportPanel = ({ uid, onDone, compact = false }: ExportPanelProps) => {
+const ExportPanel = ({ onDone, compact = false }: ExportPanelProps) => {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [mode, setMode] = useState<'detail' | 'summary'>('detail');
@@ -313,15 +308,28 @@ const ExportPanel = ({ uid, onDone, compact = false }: ExportPanelProps) => {
     setEndDate(end);
   };
 
-  const handleDownload = () => {
-    const url = `${api.defaults.baseURL}/export/csv?uid=${uid}&start=${startDate}&end=${endDate}&mode=${mode}`;
-    const a = document.createElement('a');
-    a.href = url;
-    a.style.display = 'none';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    onDone?.();
+  const handleDownload = async () => {
+    try {
+      const res = await api.get('/export/csv', {
+        params: { start: startDate, end: endDate, mode },
+        responseType: 'blob',
+      });
+      const disposition = res.headers['content-disposition'] || '';
+      const filenameMatch = disposition.match(/filename="?([^"]+)"?/);
+      const filename = filenameMatch ? filenameMatch[1] : `zimmeter_${startDate}_${endDate}.csv`;
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      onDone?.();
+    } catch {
+      alert('CSVのダウンロードに失敗しました');
+    }
   };
 
   const canDownload = !!(startDate && endDate && hasData && !checking);
@@ -401,7 +409,7 @@ const ExportPanel = ({ uid, onDone, compact = false }: ExportPanelProps) => {
 };
 
 // Desktop Popover
-const DesktopExportPopover = ({ uid }: ExportPopoverProps) => {
+const DesktopExportPopover = () => {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -433,7 +441,7 @@ const DesktopExportPopover = ({ uid }: ExportPopoverProps) => {
               <X size={16} />
             </button>
           </div>
-          <ExportPanel uid={uid} onDone={() => setOpen(false)} />
+          <ExportPanel onDone={() => setOpen(false)} />
         </div>
       )}
     </div>
@@ -441,7 +449,7 @@ const DesktopExportPopover = ({ uid }: ExportPopoverProps) => {
 };
 
 // Mobile BottomSheet
-const MobileExportSheet = ({ uid, onClose }: ExportPopoverProps & { onClose: () => void }) => {
+const MobileExportSheet = ({ onClose }: { onClose: () => void }) => {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
@@ -474,7 +482,7 @@ const MobileExportSheet = ({ uid, onClose }: ExportPopoverProps & { onClose: () 
               <X size={20} />
             </button>
           </div>
-          <ExportPanel uid={uid} onDone={handleClose} compact />
+          <ExportPanel onDone={handleClose} compact />
         </div>
       </div>
     </div>

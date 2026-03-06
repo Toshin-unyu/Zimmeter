@@ -514,7 +514,7 @@ function ZimmeterApp() {
                         >
                             <History size={20} />
                         </button>
-                        <DesktopExportPopover uid={uid} />
+                        <DesktopExportPopover />
                         <button
                             onClick={() => setShowChangelog(true)}
                             className="p-2 text-gray-600 hover:bg-gray-100 rounded-md transition-colors"
@@ -869,7 +869,7 @@ function ZimmeterApp() {
         />
 
         {showMobileExport && (
-            <MobileExportSheet uid={uid} onClose={() => setShowMobileExport(false)} />
+            <MobileExportSheet onClose={() => setShowMobileExport(false)} />
         )}
 
         {showIdleAlert && !activeLogQuery.data && !showLoginModal && !hasLeftWork && (

@@ -175,7 +175,8 @@ export const MonitorTable = ({ selectedUsers = [], timeRange = 'daily', customSt
           const dateObj = new Date(log.startTime);
           const jstDate = new Date(dateObj.toLocaleString("en-US", { timeZone: "Asia/Tokyo" }));
           const dateKey = `${jstDate.getFullYear()}/${String(jstDate.getMonth() + 1).padStart(2, '0')}/${String(jstDate.getDate()).padStart(2, '0')}`;
-          const dur = log.duration || 0;
+          // 進行中ログ（endTime/durationなし）は現在時刻までの秒数で仮計算
+          const dur = log.duration || (log.endTime ? 0 : Math.floor((Date.now() - new Date(log.startTime).getTime()) / 1000));
           const key = `${log.user.name}|${dateKey}|${log.categoryNameSnapshot}`;
 
           const existing = aggregated.get(key);

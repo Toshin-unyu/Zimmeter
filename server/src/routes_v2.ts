@@ -253,10 +253,28 @@ const formatDuration = (seconds: number): string => {
 // 履歴をCSVでダウンロード（日付範囲・明細/集計対応）
 router.get('/export/csv', async (req: Request, res: Response) => {
   try {
-    const currentUser = getUser(req);
     const mode = (req.query.mode as string) || 'detail';
     const startParam = req.query.start as string | undefined;
     const endParam = req.query.end as string | undefined;
+
+    // Validate mode
+    if (mode !== 'detail' && mode !== 'summary') {
+      return res.status(400).json({ error: 'Invalid mode' });
+    }
+    // Validate date format
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (startParam && !dateRegex.test(startParam)) {
+      return res.status(400).json({ error: 'Invalid start date format' });
+    }
+    if (endParam && !dateRegex.test(endParam)) {
+      return res.status(400).json({ error: 'Invalid end date format' });
+    }
+    // Both start and end are required if either is specified
+    if ((startParam && !endParam) || (!startParam && endParam)) {
+      return res.status(400).json({ error: 'Both start and end are required' });
+    }
+
+    const currentUser = getUser(req);
 
     // Determine date range
     let rangeStart: Date;
@@ -292,7 +310,8 @@ router.get('/export/csv', async (req: Request, res: Response) => {
       // Summary mode: group by date x category
       const dayMap = new Map<string, Map<string, number>>();
 
-      for (const log of logs) {
+      for (let i = 0; i < logs.length; i++) {
+        const log = logs[i];
         const dateStr = new Date(new Date(log.startTime).getTime() + 9 * 60 * 60 * 1000)
           .toISOString().split('T')[0];
 
@@ -301,8 +320,7 @@ router.get('/export/csv', async (req: Request, res: Response) => {
 
         // Calculate duration
         let dur = log.duration || 0;
-        const logIdx = logs.indexOf(log);
-        const nextLog = logs[logIdx + 1];
+        const nextLog = logs[i + 1];
         if (nextLog && nextLog.userId === log.userId) {
           const nextDate = new Date(new Date(nextLog.startTime).getTime() + 9 * 60 * 60 * 1000)
             .toISOString().split('T')[0];
@@ -355,10 +373,18 @@ router.get('/export/csv', async (req: Request, res: Response) => {
         let endTime = log.endTime;
         let duration = log.duration;
 
+        const logDate = new Date(new Date(log.startTime).getTime() + 9 * 60 * 60 * 1000)
+          .toISOString().split('T')[0];
+
         const nextLog = logs[index + 1];
         if (nextLog) {
-          endTime = nextLog.startTime;
-          duration = Math.floor((new Date(endTime).getTime() - new Date(log.startTime).getTime()) / 1000);
+          const nextDate = new Date(new Date(nextLog.startTime).getTime() + 9 * 60 * 60 * 1000)
+            .toISOString().split('T')[0];
+          if (nextDate === logDate) {
+            endTime = nextLog.startTime;
+            duration = Math.floor((new Date(endTime).getTime() - new Date(log.startTime).getTime()) / 1000);
+          }
+          // 日跨ぎの場合は log.endTime / log.duration をそのまま使う
         } else if (endTime) {
           duration = duration ?? Math.floor((new Date(endTime).getTime() - new Date(log.startTime).getTime()) / 1000);
         }
@@ -372,11 +398,10 @@ router.get('/export/csv', async (req: Request, res: Response) => {
 
         const durationStr = duration ? formatDuration(duration) : '-';
 
-        const logDate = new Date(new Date(log.startTime).getTime() + 9 * 60 * 60 * 1000)
-          .toISOString().split('T')[0].replace(/-/g, '/');
+        const logDateDisplay = logDate.replace(/-/g, '/');
 
         return {
-          date: logDate,
+          date: logDateDisplay,
           start: new Date(log.startTime).toLocaleTimeString('ja-JP', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit' }),
           end: endTime ? new Date(endTime).toLocaleTimeString('ja-JP', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit' }) : '進行中',
           task: log.categoryNameSnapshot,
