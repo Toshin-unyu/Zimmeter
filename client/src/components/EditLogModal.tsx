@@ -240,7 +240,7 @@ export const EditLogModal = ({ isOpen, onClose, mode, log, categories, uid, init
                 />
               </div>
             </div>
-            <p className="text-xs text-gray-500 mt-1">終了時刻を指定すると、途中割り込みとして前後の時間が自動調整されます</p>
+            <p className="text-xs text-gray-500 mt-1">終了時刻を指定すると、指定した時間帯のログが作成されます</p>
           </div>
         )}
         

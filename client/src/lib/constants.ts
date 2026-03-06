@@ -33,6 +33,9 @@ export const COLOR_PRESETS: ColorPreset[] = [
   { bg: 'bg-slate-800', border: 'border-slate-800', text: 'text-white', label: '黒' },
 ];
 
+// Break判定の最小秒数（これ未満のギャップは休憩として表示しない）
+export const BREAK_MIN_SECONDS = 60;
+
 // UI Color Mapping Helper
 export const getCategoryColor = (category: Partial<Category>): { color: string, borderColor?: string } => {
   // DB保存の設定があればそれを使用

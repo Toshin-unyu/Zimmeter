@@ -1,6 +1,6 @@
 import { Clock, Pencil } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import type { Category } from '../../lib/constants';
+import { BREAK_MIN_SECONDS, type Category } from '../../lib/constants';
 import { getCategoryStyle } from '../../lib/utils';
 
 interface WorkLog {
@@ -108,7 +108,7 @@ export const TodayHistoryBar = ({ logs, mergedCategories, onItemDoubleClick, onE
       const gapStartMs = new Date(log.endTime).getTime();
       const gapEndMs = new Date(next.startTime).getTime();
       const gapSeconds = Math.max(0, Math.floor((gapEndMs - gapStartMs) / 1000));
-      if (gapSeconds < 60) continue;
+      if (gapSeconds < BREAK_MIN_SECONDS) continue;
 
       pushToHour(log.endTime, {
         kind: 'break',

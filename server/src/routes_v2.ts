@@ -74,6 +74,23 @@ router.post('/logs/manual', async (req: Request, res: Response) => {
       if (endDate.getTime() <= start.getTime()) {
         return res.status(400).json({ error: 'endTime must be after startTime' });
       }
+      if (endDate.getTime() > now.getTime()) {
+        return res.status(400).json({ error: 'endTime must not be in the future' });
+      }
+
+      // 既存ログとの時間重複チェック（進行中ログとポイントログは除外）
+      const overlapping = await prisma.$queryRaw<{ id: number }[]>`
+        SELECT id FROM work_logs
+        WHERE "userId" = ${currentUser.id}
+          AND "startTime" < ${endDate}
+          AND "endTime" > ${start}
+          AND "endTime" != "startTime"
+        LIMIT 1
+      `;
+      if (overlapping.length > 0) {
+        return res.status(409).json({ error: '指定した時間帯に既存の記録が重複しています' });
+      }
+
       end = endDate;
       duration = Math.floor((end.getTime() - start.getTime()) / 1000);
     } else {
@@ -327,8 +344,10 @@ router.get('/export/csv', async (req: Request, res: Response) => {
 
         // Calculate duration
         let dur = log.duration || 0;
+        // 手動作成・編集済みログでendTimeが明示的に設定されている場合はDBの値を優先
+        const hasExplicitEnd = log.endTime && new Date(log.endTime).getTime() !== new Date(log.startTime).getTime() && (log.isManual || log.isEdited);
         const nextLog = logs[i + 1];
-        if (nextLog && nextLog.userId === log.userId) {
+        if (!hasExplicitEnd && nextLog && nextLog.userId === log.userId) {
           const nextDate = new Date(new Date(nextLog.startTime).getTime() + 9 * 60 * 60 * 1000)
             .toISOString().split('T')[0];
           if (nextDate === dateStr) {
@@ -384,7 +403,9 @@ router.get('/export/csv', async (req: Request, res: Response) => {
           .toISOString().split('T')[0];
 
         const nextLog = logs[index + 1];
-        if (nextLog) {
+        // 手動作成・編集済みログでendTimeが明示的に設定されている場合はDBの値を優先
+        const hasExplicitEnd = endTime && new Date(endTime).getTime() !== new Date(log.startTime).getTime() && (log.isManual || log.isEdited);
+        if (nextLog && !hasExplicitEnd) {
           const nextDate = new Date(new Date(nextLog.startTime).getTime() + 9 * 60 * 60 * 1000)
             .toISOString().split('T')[0];
           if (nextDate === logDate) {
@@ -1392,13 +1413,14 @@ router.get('/logs/history', async (req: Request, res: Response) => {
 
     // 各項目のdurationを「次の項目の開始時間との差」で再計算
     const updatedLogs = logs.map((log, index) => {
-      // 編集済みフラグがあり、かつ終了時間が設定されている場合は、DBの値を優先する（隙間を許容）
-      if (log.isEdited && log.endTime) {
+      // 手動作成・編集済みログでendTimeが明示的に設定されている場合はDBの値を優先する（隙間を許容）
+      const hasExplicitEnd = log.endTime && new Date(log.endTime).getTime() !== new Date(log.startTime).getTime();
+      if (hasExplicitEnd && (log.isManual || log.isEdited)) {
          return log;
       }
 
       const nextLog = logs[index + 1];
-      
+
       // 次のログがある場合：次のログの開始時間までをこのログの期間とする（隙間なし）
       if (nextLog) {
         const endTime = new Date(nextLog.startTime);
@@ -1900,8 +1922,10 @@ router.get('/export/pdf', async (req: Request, res: Response) => {
       let endTime = log.endTime;
       let duration = log.duration;
 
+      // 手動作成・編集済みログでendTimeが明示的に設定されている場合はDBの値を優先
+      const hasExplicitEnd = endTime && new Date(endTime).getTime() !== new Date(log.startTime).getTime() && (log.isManual || log.isEdited);
       const nextLog = logs[index + 1];
-      if (nextLog) {
+      if (nextLog && !hasExplicitEnd) {
         endTime = nextLog.startTime;
         duration = Math.floor((new Date(endTime).getTime() - new Date(log.startTime).getTime()) / 1000);
       } else if (endTime) {
