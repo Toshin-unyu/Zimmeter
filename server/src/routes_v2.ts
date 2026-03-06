@@ -1163,13 +1163,13 @@ router.patch('/logs/:id', async (req: Request, res: Response) => {
     console.log(`[PATCH Log ${id}] Request body:`, req.body);
 
     // noteのみの変更時はisEditedを変更しない
-    const hasNonNoteChanges = categoryId || startTime || endTime !== undefined;
+    const hasNonNoteChanges = categoryId !== undefined || startTime !== undefined || endTime !== undefined;
     const data: any = {};
     if (hasNonNoteChanges) {
         data.isEdited = true;
     }
 
-    if (categoryId) {
+    if (categoryId !== undefined) {
         // カテゴリ情報の取得 (スナップショット更新用)
         const category = await prisma.category.findUnique({
           where: { id: Number(categoryId) },
@@ -1182,7 +1182,7 @@ router.patch('/logs/:id', async (req: Request, res: Response) => {
         data.categoryNameSnapshot = category.name;
     }
 
-    if (startTime) {
+    if (startTime !== undefined) {
         data.startTime = new Date(startTime);
     }
     
@@ -1217,7 +1217,7 @@ router.patch('/logs/:id', async (req: Request, res: Response) => {
     // diff構築（変更前後の値を記録）
     const changes: Record<string, { old: any; new: any; oldName?: string; newName?: string }> = {};
 
-    if (data.startTime && data.startTime.getTime() !== log.startTime.getTime()) {
+    if (data.startTime !== undefined && data.startTime.getTime() !== log.startTime.getTime()) {
       changes.startTime = { old: log.startTime.toISOString(), new: data.startTime.toISOString() };
     }
     if (data.endTime !== undefined) {
@@ -1227,14 +1227,6 @@ router.patch('/logs/:id', async (req: Request, res: Response) => {
         changes.endTime = { old: oldEnd, new: newEnd };
       }
     }
-    if (data.categoryId && data.categoryId !== log.categoryId) {
-      changes.categoryId = {
-        old: log.categoryId,
-        new: data.categoryId,
-        oldName: log.categoryNameSnapshot,
-        newName: data.categoryNameSnapshot,
-      };
-    }
     if (note !== undefined) {
       const normalizedNote = note === '' ? null : note;
       if (normalizedNote !== log.note) {
@@ -1243,8 +1235,19 @@ router.patch('/logs/:id', async (req: Request, res: Response) => {
     }
 
     // トランザクションで履歴作成+ログ更新を同時実行
-    const hasChanges = Object.keys(changes).length > 0;
     const updatedLog = await prisma.$transaction(async (tx) => {
+      // categoryIdのdiff構築はトランザクション内でDBから名前を取得
+      if (data.categoryId !== undefined && data.categoryId !== log.categoryId) {
+        const newCategory = await tx.category.findUnique({ where: { id: data.categoryId } });
+        changes.categoryId = {
+          old: log.categoryId,
+          new: data.categoryId,
+          oldName: log.categoryNameSnapshot,
+          newName: newCategory?.name ?? '不明',
+        };
+      }
+
+      const hasChanges = Object.keys(changes).length > 0;
       if (hasChanges) {
         await tx.workLogHistory.create({
           data: {

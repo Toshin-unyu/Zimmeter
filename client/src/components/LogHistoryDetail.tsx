@@ -24,7 +24,7 @@ interface LogHistoryDetailProps {
 }
 
 const formatTimeValue = (val: string | number | null): string => {
-  if (!val) return '-';
+  if (val == null) return '-';
   if (typeof val === 'string' && val.includes('T')) {
     return new Date(val).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
