@@ -46,6 +46,13 @@ router.post('/logs/manual', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Missing categoryId/startTime' });
     }
 
+    if (note !== undefined && typeof note !== 'string') {
+      return res.status(400).json({ error: 'Invalid note' });
+    }
+    if (note && note.length > 1000) {
+      return res.status(400).json({ error: 'Note too long (max 1000)' });
+    }
+
     const start = new Date(startTime);
     if (Number.isNaN(start.getTime())) {
       return res.status(400).json({ error: 'Invalid startTime' });
@@ -1186,6 +1193,13 @@ router.patch('/logs/:id', async (req: Request, res: Response) => {
     }
 
     console.log(`[PATCH Log ${id}] Request body:`, req.body);
+
+    if (note !== undefined && typeof note !== 'string') {
+      return res.status(400).json({ error: 'Invalid note' });
+    }
+    if (note && note.length > 1000) {
+      return res.status(400).json({ error: 'Note too long (max 1000)' });
+    }
 
     // noteのみの変更時はisEditedを変更しない
     const hasNonNoteChanges = categoryId !== undefined || startTime !== undefined || endTime !== undefined;

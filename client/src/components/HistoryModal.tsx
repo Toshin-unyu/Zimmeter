@@ -59,6 +59,9 @@ export const HistoryModal = ({
       queryClient.invalidateQueries({ queryKey: ['history'] });
       setEditingNoteLogId(null);
     },
+    onError: () => {
+      alert('メモの保存に失敗しました');
+    },
   });
 
   useEffect(() => {
@@ -297,7 +300,11 @@ export const HistoryModal = ({
                                     setEditingNoteLogId(null);
                                   }
                                 }}
-                                onBlur={() => saveNoteMutation.mutate({ logId: log.id, note: noteText })}
+                                onBlur={() => {
+                                  if (!saveNoteMutation.isPending) {
+                                    saveNoteMutation.mutate({ logId: log.id, note: noteText });
+                                  }
+                                }}
                                 placeholder="メモを入力... (Enter で保存)"
                               />
                             </div>
