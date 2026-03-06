@@ -41,6 +41,7 @@ services:
     volumes:
       - ./client:/app
       - /app/node_modules
+      - ./.git:/.git:ro
 
 volumes:
   postgres_data:
