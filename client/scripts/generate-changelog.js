@@ -43,10 +43,24 @@ function cleanDescription(desc) {
 function generateChangelog() {
   const overrides = loadOverrides();
 
-  const gitLog = execSync(
-    'git log --pretty=format:"%ad|%s" --date=short',
-    { encoding: 'utf-8', cwd: resolve(__dirname, '../../') }
-  );
+  let gitLog;
+  try {
+    gitLog = execSync(
+      'git log --pretty=format:"%ad|%s" --date=short',
+      { encoding: 'utf-8', cwd: resolve(__dirname, '../../') }
+    );
+  } catch {
+    // Docker内などgitリポジトリがない環境では既存のchangelog.jsonを維持
+    const existingPath = join(resolve(__dirname, '../public'), 'changelog.json');
+    if (existsSync(existingPath)) {
+      console.log('gitリポジトリなし: 既存のchangelog.jsonを使用');
+    } else {
+      mkdirSync(resolve(__dirname, '../public'), { recursive: true });
+      writeFileSync(existingPath, '[]', 'utf-8');
+      console.log('gitリポジトリなし: 空のchangelog.jsonを生成');
+    }
+    return;
+  }
 
   const lines = gitLog.trim().split('\n').filter(Boolean);
   const entriesByDate = {};
