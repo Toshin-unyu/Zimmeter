@@ -1,0 +1,357 @@
+[
+  {
+    "date": "2026-03-11",
+    "entries": [
+      {
+        "type": "fix",
+        "label": "バグ修正",
+        "description": "changelog生成のDocker環境対応"
+      },
+      {
+        "type": "fix",
+        "label": "バグ修正",
+        "description": "Dockerfile.prodにgitを追加（changelog生成用）"
+      }
+    ]
+  },
+  {
+    "date": "2026-03-09",
+    "entries": [
+      {
+        "type": "fix",
+        "label": "バグ修正",
+        "description": "SW runtimeCachingを空にし旧キャッシュ自動削除を追加"
+      },
+      {
+        "type": "fix",
+        "label": "バグ修正",
+        "description": "APIキャッシュ戦略をNetworkOnlyに変更しデータ不整合を防止"
+      }
+    ]
+  },
+  {
+    "date": "2026-03-06",
+    "entries": [
+      {
+        "type": "fix",
+        "label": "バグ修正",
+        "description": "レビュー指摘3件対応 - 重複チェック・未来時刻バリデーション・Break閾値定数化"
+      },
+      {
+        "type": "feat",
+        "label": "新機能",
+        "description": "コンテナ起動時にchangelog.jsonを自動生成"
+      },
+      {
+        "type": "fix",
+        "label": "バグ修正",
+        "description": "レビュー指摘3件対応 - メモ二重保存防止・バリデーション・エラーハンドリング"
+      },
+      {
+        "type": "fix",
+        "label": "バグ修正",
+        "description": "CSVエクスポートのレビュー指摘5件対応"
+      },
+      {
+        "type": "fix",
+        "label": "バグ修正",
+        "description": "ログ編集のtruthy判定修正とカテゴリ名取得の信頼性向上"
+      }
+    ]
+  },
+  {
+    "date": "2026-03-05",
+    "entries": [
+      {
+        "type": "feat",
+        "label": "新機能",
+        "description": "PWA対応（デスクトップアプリ風のインストール・起動）"
+      },
+      {
+        "type": "feat",
+        "label": "新機能",
+        "description": "本日履歴のレイアウト改善と編集機能強化"
+      },
+      {
+        "type": "fix",
+        "label": "バグ修正",
+        "description": "明細+集計の同時ダウンロードが1件しかダウンロードされない問題を修正"
+      },
+      {
+        "type": "feat",
+        "label": "新機能",
+        "description": "カレンダーにホバープレビューと土日色分けを追加"
+      },
+      {
+        "type": "feat",
+        "label": "新機能",
+        "description": "データ出力機能の強化（週報対応+管理画面集計モード）"
+      },
+      {
+        "type": "feat",
+        "label": "新機能",
+        "description": "WorkLogに業務詳細メモ(note)機能を追加"
+      },
+      {
+        "type": "feat",
+        "label": "新機能",
+        "description": "WorkLog修正履歴の記録・表示機能を追加"
+      }
+    ]
+  },
+  {
+    "date": "2026-03-04",
+    "entries": [
+      {
+        "type": "feat",
+        "label": "新機能",
+        "description": "改修履歴の自動生成・表示機能を追加"
+      },
+      {
+        "type": "fix",
+        "label": "バグ修正",
+        "description": "アイドルアラートが閉じた後も再表示されるよう修正"
+      },
+      {
+        "type": "fix",
+        "label": "バグ修正",
+        "description": "モバイル表示の微調整（ヘッダー重なり・ボタン縮小）"
+      },
+      {
+        "type": "fix",
+        "label": "バグ修正",
+        "description": "アラートボックスのbounceアニメーションを削除"
+      }
+    ]
+  },
+  {
+    "date": "2026-02-18",
+    "entries": [
+      {
+        "type": "fix",
+        "label": "バグ修正",
+        "description": "モバイル表示の最適化（iPhone SE対応）"
+      },
+      {
+        "type": "fix",
+        "label": "バグ修正",
+        "description": "ブラウザタブのタイトルとFaviconをT-Series共通に変更"
+      },
+      {
+        "type": "feat",
+        "label": "新機能",
+        "description": "修正モーダルに開始・終了時刻の編集機能を追加"
+      }
+    ]
+  },
+  {
+    "date": "2026-01-27",
+    "entries": [
+      {
+        "type": "feat",
+        "label": "新機能",
+        "description": "モバイル対応 - ハンバーガーメニュー導入 & ユーザー情報カード修正"
+      }
+    ]
+  },
+  {
+    "date": "2026-01-23",
+    "entries": [
+      {
+        "type": "fix",
+        "label": "バグ修正",
+        "description": "棒グラフ・円グラフのタイムゾーン処理とモード修正"
+      },
+      {
+        "type": "feat",
+        "label": "新機能",
+        "description": "ヘッダーのユーザーアイコンをクリック可能にし、情報カードを表示"
+      }
+    ]
+  },
+  {
+    "date": "2025-12-19",
+    "entries": [
+      {
+        "type": "fix",
+        "label": "バグ修正",
+        "description": "退社状態をサーバーから取得して正しく復元する"
+      },
+      {
+        "type": "feat",
+        "label": "新機能",
+        "description": "作業ログをタイムライン形式で表示するように変更"
+      },
+      {
+        "type": "fix",
+        "label": "バグ修正",
+        "description": "退社取消機能の修正とDockerネットワーク設定の更新"
+      },
+      {
+        "type": "fix",
+        "label": "バグ修正",
+        "description": "退社取り消し（業務再開）が機能しない問題を修正"
+      },
+      {
+        "type": "feat",
+        "label": "新機能",
+        "description": "退社取り消し機能の追加とタスク切り替えUXの改善"
+      }
+    ]
+  },
+  {
+    "date": "2025-12-18",
+    "entries": [
+      {
+        "type": "fix",
+        "label": "バグ修正",
+        "description": "退社修正ロジックの改善とUI修正"
+      },
+      {
+        "type": "fix",
+        "label": "バグ修正",
+        "description": "履歴編集の制限と退社補正ロジックの改善"
+      }
+    ]
+  },
+  {
+    "date": "2025-12-17",
+    "entries": [
+      {
+        "type": "feat",
+        "label": "新機能",
+        "description": "管理画面のカテゴリ管理を改善"
+      },
+      {
+        "type": "fix",
+        "label": "バグ修正",
+        "description": "タイマー開始の不具合修正、退社時刻の手動入力に対応"
+      },
+      {
+        "type": "feat",
+        "label": "新機能",
+        "description": "過去の未退社ログに日付を表示するように変更"
+      },
+      {
+        "type": "fix",
+        "label": "バグ修正",
+        "description": "モニタリング表のステータス表示を改善"
+      },
+      {
+        "type": "feat",
+        "label": "新機能",
+        "description": "退社機能とモニタリング機能を追加"
+      },
+      {
+        "type": "fix",
+        "label": "バグ修正",
+        "description": "タスク切替時のメッセージを日本語化"
+      },
+      {
+        "type": "feat",
+        "label": "新機能",
+        "description": "モニタリング表のPDF出力に役割・種別・更新日時を追加"
+      },
+      {
+        "type": "feat",
+        "label": "新機能",
+        "description": "モニタリング表に種別・更新日時の列を追加"
+      },
+      {
+        "type": "feat",
+        "label": "新機能",
+        "description": "PDF出力のラベルとモニタリング表のユーザー表示を改善"
+      },
+      {
+        "type": "feat",
+        "label": "新機能",
+        "description": "退社機能、ダブルクリック操作、PDF出力機能を追加"
+      },
+      {
+        "type": "fix",
+        "label": "バグ修正",
+        "description": "管理者のカテゴリ設定と自動保存の動作を修正"
+      },
+      {
+        "type": "fix",
+        "label": "バグ修正",
+        "description": "管理者個人設定とグローバル設定の分離を修正"
+      }
+    ]
+  },
+  {
+    "date": "2025-12-16",
+    "entries": [
+      {
+        "type": "fix",
+        "label": "バグ修正",
+        "description": "管理画面ダッシュボードのタイトルと日付範囲の表示を修正"
+      },
+      {
+        "type": "feat",
+        "label": "新機能",
+        "description": "管理画面のグラフに日付粒度の自動切替を追加"
+      },
+      {
+        "type": "feat",
+        "label": "新機能",
+        "description": "管理画面ダッシュボードの改善とタイムゾーンの修正"
+      }
+    ]
+  },
+  {
+    "date": "2025-12-15",
+    "entries": [
+      {
+        "type": "fix",
+        "label": "バグ修正",
+        "description": "システム機能の復元と管理画面の改善"
+      }
+    ]
+  },
+  {
+    "date": "2025-12-11",
+    "entries": [
+      {
+        "type": "feat",
+        "label": "新機能",
+        "description": "管理画面のグラフとCSV出力を複数ユーザー対応に"
+      },
+      {
+        "type": "fix",
+        "label": "バグ修正",
+        "description": "レスポンシブレイアウトとヘッダーの安定性を改善"
+      },
+      {
+        "type": "feat",
+        "label": "新機能",
+        "description": "グラフのプレビュー・ダウンロード機能を追加"
+      },
+      {
+        "type": "feat",
+        "label": "新機能",
+        "description": "カテゴリのカスタマイズ機能を追加（色・ボーダー・表示設定）"
+      },
+      {
+        "type": "feat",
+        "label": "新機能",
+        "description": "管理者用のカテゴリ並び替え・表示同期機能を追加"
+      }
+    ]
+  },
+  {
+    "date": "2025-12-10",
+    "entries": [
+      {
+        "type": "feat",
+        "label": "新機能",
+        "description": "管理者がカテゴリの並び順を変更できるように"
+      },
+      {
+        "type": "feat",
+        "label": "新機能",
+        "description": "管理画面の作業ロググラフにCSVダウンロード機能を追加"
+      }
+    ]
+  }
+]
