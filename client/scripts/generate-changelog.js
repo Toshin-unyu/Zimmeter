@@ -19,7 +19,6 @@ const __dirname = dirname(__filename);
 
 const TYPE_MAP = {
   feat: '新機能',
-  fix: 'バグ修正',
   perf: 'パフォーマンス改善',
 };
 
@@ -74,7 +73,7 @@ function generateChangelog() {
     const message = line.slice(sepIdx + 1);
 
     // "feat: ...", "fix: ...", "perf: ..." を抽出（スコープ付きも対応）
-    const match = message.match(/^(feat|fix|perf)(\([^)]*\))?:\s*(.+)/);
+    const match = message.match(/^(feat|perf)(\([^)]*\))?:\s*(.+)/);
     if (!match) continue;
 
     const type = match[1];

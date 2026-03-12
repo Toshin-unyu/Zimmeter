@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { X, Sparkles, Bug, Zap } from 'lucide-react';
+import { X, Sparkles, Zap } from 'lucide-react';
 
 interface ChangelogEntry {
-  type: 'feat' | 'fix' | 'perf';
+  type: 'feat' | 'perf';
   label: string;
   description: string;
 }
@@ -14,7 +14,6 @@ interface ChangelogDay {
 
 const TYPE_CONFIG = {
   feat: { icon: Sparkles, color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-200', label: '新機能' },
-  fix: { icon: Bug, color: 'text-orange-600', bg: 'bg-orange-50', border: 'border-orange-200', label: 'バグ修正' },
   perf: { icon: Zap, color: 'text-green-600', bg: 'bg-green-50', border: 'border-green-200', label: '改善' },
 };
 
