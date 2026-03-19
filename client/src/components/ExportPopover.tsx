@@ -337,8 +337,56 @@ const ExportPanel = ({ onDone, compact = false }: ExportPanelProps) => {
   const btnSize = compact ? 'text-xs' : 'text-sm';
   const py = compact ? 'py-1' : 'py-1.5';
 
+  const [pdfDownloading, setPdfDownloading] = useState(false);
+
+  const handlePdfDownload = async () => {
+    setPdfDownloading(true);
+    try {
+      const res = await api.get('/export/pdf', { responseType: 'blob' });
+      const disposition = res.headers['content-disposition'] || '';
+      const filenameMatch = disposition.match(/filename="?([^"]+)"?/);
+      const filename = filenameMatch ? filenameMatch[1] : `daily_report_${format(new Date(), 'yyyy-MM-dd')}.pdf`;
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      onDone?.();
+    } catch {
+      alert('PDF日報のダウンロードに失敗しました');
+    } finally {
+      setPdfDownloading(false);
+    }
+  };
+
   return (
     <>
+      {/* PDF daily report */}
+      <div className="mb-3">
+        <p className={`${btnSize} font-medium text-gray-600 mb-1.5`}>今日の日報（PDF）</p>
+        <button
+          onClick={handlePdfDownload}
+          disabled={pdfDownloading}
+          className={`w-full flex items-center justify-center gap-2 px-3 ${compact ? 'py-3' : 'py-2'} rounded${compact ? '-lg' : ''} ${btnSize} font-medium transition-colors ${
+            pdfDownloading
+              ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+              : 'bg-blue-600 hover:bg-blue-700 text-white'
+          }`}
+        >
+          <Download size={compact ? 18 : 16} />
+          {pdfDownloading ? 'ダウンロード中...' : 'PDF日報ダウンロード'}
+        </button>
+      </div>
+
+      <hr className="border-gray-200 mb-3" />
+
+      {/* CSV export section */}
+      <p className={`${btnSize} font-medium text-gray-600 mb-1.5`}>CSV出力</p>
+
       {/* Presets */}
       <div className="flex gap-2 mb-3">
         {([['today', '今日'], ['thisWeek', '今週'], ['lastWeek', '先週']] as const).map(([key, label]) => (
