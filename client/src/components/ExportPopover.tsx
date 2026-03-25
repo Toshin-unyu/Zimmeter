@@ -325,7 +325,7 @@ const ExportPanel = ({ onDone, compact = false }: ExportPanelProps) => {
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
       onDone?.();
     } catch {
       alert('CSVのダウンロードに失敗しました');
@@ -354,7 +354,7 @@ const ExportPanel = ({ onDone, compact = false }: ExportPanelProps) => {
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
       onDone?.();
     } catch {
       alert('PDF日報のダウンロードに失敗しました');
@@ -371,7 +371,7 @@ const ExportPanel = ({ onDone, compact = false }: ExportPanelProps) => {
         <button
           onClick={handlePdfDownload}
           disabled={pdfDownloading}
-          className={`w-full flex items-center justify-center gap-2 px-3 ${compact ? 'py-3' : 'py-2'} rounded${compact ? '-lg' : ''} ${btnSize} font-medium transition-colors ${
+          className={`w-full flex items-center justify-center gap-2 px-3 ${compact ? 'py-2' : 'py-3'} rounded${compact ? '-lg' : ''} ${btnSize} font-medium transition-colors ${
             pdfDownloading
               ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
               : 'bg-blue-600 hover:bg-blue-700 text-white'
