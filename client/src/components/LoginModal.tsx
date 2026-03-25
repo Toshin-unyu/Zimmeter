@@ -8,14 +8,31 @@ interface LoginModalProps {
 
 export const LoginModal = ({ isOpen, onSubmit }: LoginModalProps) => {
   const [username, setUsername] = useState('');
+  const [error, setError] = useState('');
 
   if (!isOpen) return null;
 
+  const UID_PATTERN = /^[a-zA-Z0-9_-]+$/;
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setUsername(value);
+    if (value && !UID_PATTERN.test(value)) {
+      setError('半角英数字、ハイフン(-)、アンダースコア(_)のみ使用できます');
+    } else {
+      setError('');
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (username.trim()) {
-      onSubmit(username.trim());
+    const trimmed = username.trim();
+    if (!trimmed) return;
+    if (!UID_PATTERN.test(trimmed)) {
+      setError('半角英数字、ハイフン(-)、アンダースコア(_)のみ使用できます');
+      return;
     }
+    onSubmit(trimmed);
   };
 
   return (
@@ -28,29 +45,36 @@ export const LoginModal = ({ isOpen, onSubmit }: LoginModalProps) => {
             <h2 className="text-2xl font-bold text-gray-800">ようこそ</h2>
             <p className="text-gray-500 mt-2 text-center">
                 業務を開始する前に、<br/>
-                あなたのお名前（ユーザー名）を入力してください。
+                ユーザーIDを入力してください。
             </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
             <div>
                 <label className="block text-sm font-bold text-gray-700 mb-2">
-                    ユーザー名 <span className="text-red-500">*</span>
+                    ユーザーID <span className="text-red-500">*</span>
                 </label>
-                <input 
-                    type="text" 
+                <input
+                    type="text"
                     value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    className="w-full p-4 text-lg border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-50 outline-none transition-all placeholder-gray-300"
-                    placeholder="例: 山田 太郎"
+                    onChange={handleChange}
+                    className={`w-full p-4 text-lg border-2 rounded-xl focus:ring-4 outline-none transition-all placeholder-gray-300 ${
+                      error
+                        ? 'border-red-400 focus:border-red-500 focus:ring-red-50'
+                        : 'border-gray-200 focus:border-blue-500 focus:ring-blue-50'
+                    }`}
+                    placeholder="例: suzuki, tanaka_t"
                     autoFocus
                     required
                 />
+                {error && (
+                  <p className="mt-2 text-sm text-red-500">{error}</p>
+                )}
             </div>
 
-            <button 
+            <button
                 type="submit"
-                disabled={!username.trim()}
+                disabled={!username.trim() || !!error}
                 className="btn-primary w-full py-4 text-lg disabled:opacity-50 shadow-lg"
             >
                 開始する
