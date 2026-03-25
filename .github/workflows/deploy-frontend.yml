@@ -1,0 +1,62 @@
+# .github/workflows/deploy-frontend.yml
+# Zimmeter フロントエンドの自動デプロイ
+name: Deploy Frontend
+
+on:
+  push:
+    branches:
+      - release
+    paths:
+      - 'client/**'
+      - '.github/workflows/deploy-frontend.yml'
+  workflow_dispatch:  # 手動実行
+
+concurrency:
+  group: deploy-frontend-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  APP_PATH: '/srv/apps/Zimmeter'
+  INFRA_PATH: '/srv/toshin-infra'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p ${{ secrets.VPS_SSH_PORT }} -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Pull latest code
+        run: |
+          ssh -i ~/.ssh/deploy_key -p ${{ secrets.VPS_SSH_PORT }} \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
+            "cd ${{ env.APP_PATH }} && git pull --ff-only origin release"
+
+      - name: Rebuild and restart frontend
+        run: |
+          ssh -i ~/.ssh/deploy_key -p ${{ secrets.VPS_SSH_PORT }} \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
+            "cd ${{ env.INFRA_PATH }} && COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 ./scripts/control.sh prod-external build --no-cache zimmeter-client && ./scripts/control.sh prod-external up -d zimmeter-client"
+
+      - name: Verify deployment
+        run: |
+          ssh -i ~/.ssh/deploy_key -p ${{ secrets.VPS_SSH_PORT }} \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
+            "docker ps --filter name=zimmeter-client --format 'table {{.Names}}\t{{.Status}}'"
+
+      - name: Cleanup SSH key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
+
+      - name: Deployment summary
+        run: |
+          echo "## Frontend Deployment Complete :rocket:" >> $GITHUB_STEP_SUMMARY
+          echo "- **Repository:** ${{ github.repository }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Deployed at:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
