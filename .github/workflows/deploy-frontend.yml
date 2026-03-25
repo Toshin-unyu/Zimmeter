@@ -1,5 +1,5 @@
 # .github/workflows/deploy-frontend.yml
-# Zimmeter フロントエンドの自動デプロイ
+# Zimmeter フロントエンドの自動デプロイ（release → prod-internal VPS）
 name: Deploy Frontend
 
 on:
@@ -10,6 +10,8 @@ on:
       - 'client/**'
       - '.github/workflows/deploy-frontend.yml'
   workflow_dispatch:  # 手動実行
+
+permissions: {}
 
 concurrency:
   group: deploy-frontend-${{ github.ref }}
@@ -33,21 +35,21 @@ jobs:
 
       - name: Pull latest code
         run: |
-          ssh -i ~/.ssh/deploy_key -p ${{ secrets.VPS_SSH_PORT }} \
+          ssh -i ~/.ssh/deploy_key -o ConnectTimeout=10 -p ${{ secrets.VPS_SSH_PORT }} \
             ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
             "cd ${{ env.APP_PATH }} && git pull --ff-only origin release"
 
       - name: Rebuild and restart frontend
         run: |
-          ssh -i ~/.ssh/deploy_key -p ${{ secrets.VPS_SSH_PORT }} \
+          ssh -i ~/.ssh/deploy_key -o ConnectTimeout=10 -p ${{ secrets.VPS_SSH_PORT }} \
             ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
-            "cd ${{ env.INFRA_PATH }} && COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 ./scripts/control.sh prod-external build --no-cache zimmeter-client && ./scripts/control.sh prod-external up -d zimmeter-client"
+            "cd ${{ env.INFRA_PATH }} && COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 ./scripts/control.sh prod-internal build --no-cache zimmeter-frontend && ./scripts/control.sh prod-internal up -d zimmeter-frontend"
 
       - name: Verify deployment
         run: |
-          ssh -i ~/.ssh/deploy_key -p ${{ secrets.VPS_SSH_PORT }} \
+          ssh -i ~/.ssh/deploy_key -o ConnectTimeout=10 -p ${{ secrets.VPS_SSH_PORT }} \
             ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
-            "docker ps --filter name=zimmeter-client --format 'table {{.Names}}\t{{.Status}}'"
+            "docker ps --filter name=zimmeter-frontend --format 'table {{.Names}}\t{{.Status}}'"
 
       - name: Cleanup SSH key
         if: always()

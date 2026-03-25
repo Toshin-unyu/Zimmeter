@@ -1,5 +1,5 @@
 # .github/workflows/deploy-backend.yml
-# Zimmeter バックエンドの自動デプロイ
+# Zimmeter バックエンドの自動デプロイ（release → prod-internal VPS）
 name: Deploy Backend
 
 on:
@@ -10,6 +10,8 @@ on:
       - 'server/**'
       - '.github/workflows/deploy-backend.yml'
   workflow_dispatch:  # 手動実行
+
+permissions: {}
 
 concurrency:
   group: deploy-backend-${{ github.ref }}
@@ -33,21 +35,27 @@ jobs:
 
       - name: Pull latest code
         run: |
-          ssh -i ~/.ssh/deploy_key -p ${{ secrets.VPS_SSH_PORT }} \
+          ssh -i ~/.ssh/deploy_key -o ConnectTimeout=10 -p ${{ secrets.VPS_SSH_PORT }} \
             ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
             "cd ${{ env.APP_PATH }} && git pull --ff-only origin release"
 
+      - name: Run database migration
+        run: |
+          ssh -i ~/.ssh/deploy_key -o ConnectTimeout=10 -p ${{ secrets.VPS_SSH_PORT }} \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
+            "cd ${{ env.INFRA_PATH }} && ./scripts/control.sh prod-internal run --rm --build zimmeter-migrate"
+
       - name: Rebuild and restart backend
         run: |
-          ssh -i ~/.ssh/deploy_key -p ${{ secrets.VPS_SSH_PORT }} \
+          ssh -i ~/.ssh/deploy_key -o ConnectTimeout=10 -p ${{ secrets.VPS_SSH_PORT }} \
             ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
-            "cd ${{ env.INFRA_PATH }} && COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 ./scripts/control.sh prod-external build --no-cache zimmeter-server && ./scripts/control.sh prod-external up -d zimmeter-server"
+            "cd ${{ env.INFRA_PATH }} && COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1 ./scripts/control.sh prod-internal build --no-cache zimmeter-backend && ./scripts/control.sh prod-internal up -d zimmeter-backend"
 
       - name: Verify deployment
         run: |
-          ssh -i ~/.ssh/deploy_key -p ${{ secrets.VPS_SSH_PORT }} \
+          ssh -i ~/.ssh/deploy_key -o ConnectTimeout=10 -p ${{ secrets.VPS_SSH_PORT }} \
             ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
-            "docker ps --filter name=zimmeter-server --format 'table {{.Names}}\t{{.Status}}'"
+            "docker ps --filter name=zimmeter-backend --format 'table {{.Names}}\t{{.Status}}'"
 
       - name: Cleanup SSH key
         if: always()
@@ -56,7 +64,7 @@ jobs:
       - name: Deployment summary
         run: |
           echo "## Backend Deployment Complete :rocket:" >> $GITHUB_STEP_SUMMARY
-          echo "- **Migration:** auto-applied via Prisma entrypoint" >> $GITHUB_STEP_SUMMARY
+          echo "- **Migration:** applied via zimmeter-migrate service" >> $GITHUB_STEP_SUMMARY
           echo "- **Repository:** ${{ github.repository }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
