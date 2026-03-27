@@ -11,8 +11,8 @@ on:
       - '.github/workflows/deploy-backend.yml'
   workflow_dispatch:  # 手動実行
 
-permissions: {}
-
+permissions:
+  pull-requests: read
 concurrency:
   group: deploy-backend-${{ github.ref }}
   cancel-in-progress: false
@@ -26,6 +26,19 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Guard - PR merge のみ許可
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PR_COUNT=$(gh api repos/${{ github.repository }}/commits/${{ github.sha }}/pulls --jq 'length')
+          if [ "$PR_COUNT" -eq 0 ]; then
+            echo "::error::直接pushによるデプロイは禁止です。main → release のPRを作成してmergeしてください。"
+            exit 1
+          fi
+          PR_TITLE=$(gh api repos/${{ github.repository }}/commits/${{ github.sha }}/pulls --jq '.[0].title')
+          echo "PR merge確認: $PR_TITLE"
+
       - name: Setup SSH key
         run: |
           mkdir -p ~/.ssh
@@ -69,3 +82,16 @@ jobs:
           echo "- **Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Deployed at:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+      - name: Slack通知 (成功)
+        if: success()
+        run: |
+          curl -s -X POST -H 'Content-type: application/json' \
+            --data "{\"text\":\"${{ github.repository }} デプロイ成功\\n>ブランチ: ${{ github.ref_name }}\\n>コミット: \`${{ github.sha }}\`\\n>実行者: ${{ github.actor }}\"}" \
+            ${{ secrets.SLACK_WEBHOOK_URL }}
+
+      - name: Slack通知 (失敗)
+        if: failure()
+        run: |
+          curl -s -X POST -H 'Content-type: application/json' \
+            --data "{\"text\":\"<!channel> ${{ github.repository }} デプロイ失敗\\n>ブランチ: ${{ github.ref_name }}\\n>コミット: \`${{ github.sha }}\`\\n>実行者: ${{ github.actor }}\\n>詳細: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}" \
+            ${{ secrets.SLACK_WEBHOOK_URL }}
